@@ -1,0 +1,8 @@
+loc_pos_err_m: null  # 待确认（第 2 检查点冻结）
+loc_yaw_err_deg: null  # 待确认（第 2 检查点冻结）
+elev_err_m: null  # 待确认（第 2 检查点冻结）
+patrol_laps_N: null  # 待确认（第 2 检查点冻结）
+patrol_success_P: null  # 待确认（第 2 检查点冻结）
+gait_switch_timeout_s: null  # 待确认（第 2 检查点冻结）
+cmd_timeout_s: null  # 待确认（第 2 检查点冻结）
+loc_lost_timeout_s: null  # 待确认（第 2 检查点冻结）
