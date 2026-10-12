@@ -20,6 +20,9 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3-pytest
+          # Jammy's python3-pytest installs pytest-3, not the pytest command.
+          ln -s /usr/bin/pytest-3 /usr/local/bin/pytest
+          pytest --version
       - name: Run CPU tests
         shell: bash
         run: |
