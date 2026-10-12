@@ -1,0 +1,14 @@
+# Pin metadata recorded 2026-10-12; gitlinks are authoritative.
+# lightning-lm-deep-robotics: default main, 907ecebf118fbaed0ca7765822f9dfff1a13fd80
+# elevation_mapping_cupy: ROS2 branch ros2; user-authorized Humble pin
+# v2.0.0, e311bfdbcd1f8ddb698b9295a7116e25475581ac (not the current Jazzy branch tip).
+# nav2_gridmap_traversability_layer: default main, 7c1d538a716fdbc69a84822c71544378471b2a49
+[submodule "src/third_party/lightning-lm-deep-robotics"]
+	path = src/third_party/lightning-lm-deep-robotics
+	url = https://github.com/DeepRoboticsLab/lightning-lm-deep-robotics.git
+[submodule "src/third_party/elevation_mapping_cupy"]
+	path = src/third_party/elevation_mapping_cupy
+	url = https://github.com/leggedrobotics/elevation_mapping_cupy.git
+[submodule "src/third_party/nav2_gridmap_traversability_layer"]
+	path = src/third_party/nav2_gridmap_traversability_layer
+	url = https://github.com/SirErico/nav2_gridmap_traversability_layer.git

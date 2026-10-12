@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base-jammy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install pytest
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-pytest
+      - name: Run CPU tests
+        shell: bash
+        run: |
+          source scripts/env.sh
+          status=0
+          pytest --ignore=src/third_party -m "not gpu and not sim" || status=$?
+          case "$status" in
+            0|5) exit 0 ;;
+            *) exit "$status" ;;
+          esac
