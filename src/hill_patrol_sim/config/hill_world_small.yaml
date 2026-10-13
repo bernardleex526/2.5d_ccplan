@@ -1,0 +1,108 @@
+# 仿真山体实验设计值 — 缩小场景（第 5.3 节）
+# 每个配置项均必须包含 value 与 source 字段
+
+world_name:
+  value: hill_world_small
+  source: "实验设计值"
+
+# 台阶参数
+step_count_up:
+  value: 18
+  source: "实验设计值（上下各 1 段 18 级）"
+
+step_count_down:
+  value: 18
+  source: "实验设计值（上下各 1 段 18 级）"
+
+step_height:
+  value: 0.15
+  source: "用户提供；符合 GB 50352-2019 6.7.1"
+
+tread_depth:
+  value: 0.30
+  source: "GB 50352-2019 6.7.1 下限"
+
+flight_max_steps:
+  value: 18
+  source: "GB 50352-2019 6.8.5 上限"
+
+flight_steps_up:
+  value: [18]
+  source: "实验设计值（1 段 18 级）"
+
+flight_steps_down:
+  value: [18]
+  source: "实验设计值（1 段 18 级）"
+
+intermediate_landing_depth:
+  value: 1.2
+  source: "GB 50352-2019 6.8.4；大于 M20 站立长度 0.82 m"
+
+step_width:
+  value: 1.5
+  source: "国家登山健身步道标准主路面上限"
+
+# 坡道参数
+ramp_slope_deg:
+  value: 15.0
+  source: "坡度：登山步道标准“15 度左右为宜”"
+
+ramp_length:
+  value: 5.0
+  source: "缩小场景坡道长度：实验设计值"
+
+# 山顶不平路段参数
+summit_length:
+  value: 5.0
+  source: "缩小场景山顶路段长度：实验设计值"
+
+summit_roughness_max:
+  value: 0.10
+  source: "起伏最大值：实验设计值（低于国标最低台阶 0.1 m）"
+
+summit_seed:
+  value: 42
+  source: "随机种子：实验设计值"
+
+# 树木参数
+trees_seed:
+  value: 2026
+  source: "随机种子：实验设计值"
+
+trees_radius:
+  value: 0.2
+  source: "圆柱半径：实验设计值"
+
+trees_height:
+  value: 4.0
+  source: "圆柱高度：实验设计值"
+
+trees_spacing_min:
+  value: 3.0
+  source: "树木最小间距：实验设计值"
+
+trees_spacing_max:
+  value: 6.0
+  source: "树木最大间距：实验设计值"
+
+trees_offset_y:
+  value: 1.5
+  source: "路侧横向偏移：实验设计值"
+
+# 台阶区定义
+stair_zones_count:
+  value: 2
+  source: "实验设计值（上山 1、下山 1）"
+
+# GNSS 原点
+origin_latitude:
+  value: 30.0
+  source: "实验设计值（第 5.3 节与任务 T24）"
+
+origin_longitude:
+  value: 120.0
+  source: "实验设计值（第 5.3 节与任务 T24）"
+
+origin_altitude:
+  value: 0.0
+  source: "实验设计值（第 5.3 节与任务 T24）"
