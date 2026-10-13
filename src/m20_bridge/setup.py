@@ -17,7 +17,4 @@ setup(
     description='M20 hill patrol protocol encoding and decoding.',
     license='Apache-2.0',
     tests_require=['pytest'],
-    entry_points={
-        'console_scripts': ['mock_m20_server = m20_bridge.mock_m20_server:main'],
-    },
 )
