@@ -1,0 +1,1604 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.8">
+  <world name="hill_world_small">
+    <gravity>0 0 -9.8</gravity>
+    <physics name="default" type="ignored">
+      <max_step_size>.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+    <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics" />
+    <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands" />
+    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster" />
+    <light name="sun" type="directional">
+      <pose>0 0 100 0 0 0</pose>
+      <diffuse>.8 .8 .8 1</diffuse>
+      <specular>.2 .2 .2 1</specular>
+      <direction>-.5 .1 -.9</direction>
+    </light>
+    <model name="ground">
+      <static>true</static>
+      <link name="ground">
+        <pose>0 0 0 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>2000 2000</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>2000 2000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>.3 .4 .25 1</ambient>
+            <diffuse>.3 .4 .25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="path">
+      <static>true</static>
+      <link name="start_pad">
+        <pose>1.5 0 -0.1 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>3 1.5 0.2</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>3 1.5 0.2</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="ramp_up">
+        <pose>3 0 0 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <mesh>
+              <uri>hill_world_small_ramp_up.stl</uri>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <mesh>
+              <uri>hill_world_small_ramp_up.stl</uri>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>.55 .5 .4 1</ambient>
+            <diffuse>.55 .5 .4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="up_transition">
+        <pose>8.42962913145 0 0.547047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.2 1.5 1.49409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.2 1.5 1.49409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="summit_entry">
+        <pose>15.0296291314 0 1.89704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.2 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.2 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="summit_uneven">
+        <pose>18.1296291314 0 3.99409522551 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <heightmap>
+              <uri>hill_world_small_heightmap.png</uri>
+              <size>5 1.5 0.1</size>
+              <pos>0 0 0</pos>
+            </heightmap>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <heightmap>
+              <uri>hill_world_small_heightmap.png</uri>
+              <size>5 1.5 0.1</size>
+              <pos>0 0 0</pos>
+            </heightmap>
+          </geometry>
+          <material>
+            <ambient>.45 .4 .3 1</ambient>
+            <diffuse>.45 .4 .3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="summit_exit">
+        <pose>21.2296291314 0 1.89704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.2 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.2 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="down_transition">
+        <pose>27.8296291314 0 0.547047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.2 1.5 1.49409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.2 1.5 1.49409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="ramp_down">
+        <pose>28.4296291314 0 0 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <mesh>
+              <uri>hill_world_small_ramp_down.stl</uri>
+            </mesh>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <mesh>
+              <uri>hill_world_small_ramp_down.stl</uri>
+            </mesh>
+          </geometry>
+          <material>
+            <ambient>.55 .5 .4 1</ambient>
+            <diffuse>.55 .5 .4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="end_pad">
+        <pose>34.7592582629 0 -0.1 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>3 1.5 0.2</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>3 1.5 0.2</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.5 .5 .5 1</ambient>
+            <diffuse>.5 .5 .5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="stairs_up">
+      <static>true</static>
+      <link name="step_0">
+        <pose>9.17962913145 0 0.622047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.64409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.64409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_1">
+        <pose>9.47962913145 0 0.697047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.79409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.79409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_2">
+        <pose>9.77962913145 0 0.772047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.94409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.94409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_3">
+        <pose>10.0796291314 0 0.847047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.09409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.09409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_4">
+        <pose>10.3796291314 0 0.922047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.24409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.24409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_5">
+        <pose>10.6796291314 0 0.997047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.39409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.39409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_6">
+        <pose>10.9796291314 0 1.07204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.54409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.54409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_7">
+        <pose>11.2796291314 0 1.14704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.69409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.69409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_8">
+        <pose>11.5796291314 0 1.22204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.84409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.84409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_9">
+        <pose>11.8796291314 0 1.29704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.99409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.99409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_10">
+        <pose>12.1796291314 0 1.37204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.14409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.14409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_11">
+        <pose>12.4796291314 0 1.44704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.29409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.29409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_12">
+        <pose>12.7796291314 0 1.52204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.44409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.44409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_13">
+        <pose>13.0796291314 0 1.59704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.59409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.59409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_14">
+        <pose>13.3796291314 0 1.67204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.74409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.74409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_15">
+        <pose>13.6796291314 0 1.74704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.89409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.89409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_16">
+        <pose>13.9796291314 0 1.82204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.04409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.04409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_17">
+        <pose>14.2796291314 0 1.89704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="stairs_down">
+      <static>true</static>
+      <link name="step_0">
+        <pose>21.9796291314 0 1.89704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.19409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_1">
+        <pose>22.2796291314 0 1.82204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.04409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 4.04409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_2">
+        <pose>22.5796291314 0 1.74704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.89409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.89409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_3">
+        <pose>22.8796291314 0 1.67204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.74409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.74409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_4">
+        <pose>23.1796291314 0 1.59704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.59409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.59409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_5">
+        <pose>23.4796291314 0 1.52204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.44409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.44409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_6">
+        <pose>23.7796291314 0 1.44704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.29409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.29409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_7">
+        <pose>24.0796291314 0 1.37204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.14409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 3.14409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_8">
+        <pose>24.3796291314 0 1.29704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.99409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.99409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_9">
+        <pose>24.6796291314 0 1.22204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.84409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.84409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_10">
+        <pose>24.9796291314 0 1.14704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.69409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.69409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_11">
+        <pose>25.2796291314 0 1.07204761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.54409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.54409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_12">
+        <pose>25.5796291314 0 0.997047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.39409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.39409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_13">
+        <pose>25.8796291314 0 0.922047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.24409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.24409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_14">
+        <pose>26.1796291314 0 0.847047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.09409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 2.09409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_15">
+        <pose>26.4796291314 0 0.772047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.94409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.94409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_16">
+        <pose>26.7796291314 0 0.697047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.79409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.79409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="step_17">
+        <pose>27.0796291314 0 0.622047612756 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.64409522551</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.3 1.5 1.64409522551</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>.55 .55 .55 1</ambient>
+            <diffuse>.55 .55 .55 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="trees">
+      <static>true</static>
+      <link name="tree_0">
+        <pose>0 -1.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_1">
+        <pose>4.47647953986 -1.5 2.19781075017 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.3956215003454515</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.3956215003454515</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_2">
+        <pose>10.4865425608 -1.5 3.01127597009 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>6.02255194018036</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>6.02255194018036</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_3">
+        <pose>16.5338334119 -1.5 4.03818478093 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>8.076369561859282</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>8.076369561859282</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_4">
+        <pose>23.9738357625 -1.5 3.460995955 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>6.921991910000153</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>6.921991910000153</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_5">
+        <pose>28.3843831645 -1.5 2.64704761276 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>5.294095225512604</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>5.294095225512604</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_6">
+        <pose>33.2775213912 -1.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_7">
+        <pose>0 1.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_8">
+        <pose>6.2262360877 1.5 2.43223367715 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.864467354290874</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.864467354290874</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_9">
+        <pose>13.3597296176 1.5 3.7295727343 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>7.459145468605408</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>7.459145468605408</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_10">
+        <pose>19.550975437 1.5 4.03552350867 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>8.071047017337673</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>8.071047017337673</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_11">
+        <pose>26.4731314067 1.5 2.83617204395 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>5.672344087900494</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>5.672344087900494</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_12">
+        <pose>33.5455926985 1.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_13">
+        <pose>0 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_14">
+        <pose>6.34608338598 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_15">
+        <pose>11.3058197034 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_16">
+        <pose>17.7626368262 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_17">
+        <pose>22.2055830005 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_18">
+        <pose>29.4726284119 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_19">
+        <pose>35.2712477422 -7.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_20">
+        <pose>0 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_21">
+        <pose>6.74071226985 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_22">
+        <pose>13.4582680406 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_23">
+        <pose>18.2991666854 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_24">
+        <pose>23.3052191004 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="tree_25">
+        <pose>31.2248684927 -4.5 2 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>4.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>.25 .18 .1 1</ambient>
+            <diffuse>.25 .18 .1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
