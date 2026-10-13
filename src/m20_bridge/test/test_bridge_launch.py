@@ -210,6 +210,15 @@ def test_bridge_end_to_end(bridge_launch):
                     and client.hold.get_subscription_count() == 1
                     and client.gait.get_subscription_count() == 1
                     and client.stop.get_subscription_count() == 1)
+        # Healthy status/localization and continuously nonzero commands cannot
+        # authorize motion before an explicit release of the startup hold.
+        client.pump(lambda: bool(client.messages['gait'])
+                    and client.messages['link'][-1].data is True, send=client.healthy)
+        startup_until = time.monotonic() + 0.9
+        client.pump(lambda: time.monotonic() >= startup_until, send=client.healthy)
+        assert recorder.axes() and all(zero(axis) for axis in recorder.axes())
+        assert not client.messages['fault']
+        client.hold.publish(Bool(data=False))
         client.pump(lambda: any(math.isclose(msg.linear.x, 0.5)
                                and math.isclose(msg.linear.y, -0.5)
                                and math.isclose(msg.angular.z, 0.5)

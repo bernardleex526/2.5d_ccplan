@@ -13,11 +13,15 @@ The ament_python build task generates the package's AMENT_PREFIX_PATH hook;
 installing Python modules alone does not register a usable ROS environment.
 
 Startup sends Mode=0 and zero, then waits for actual status feedback, a healthy
-localization message and a fresh command. This uninitialized handshake cannot
-move or latch a spurious missing-input fault. Once armed, all five T07 events
-are evaluated with monotonic time. A fault latches until an explicit node
-restart; recovery messages never reset it. Hold and pending gait changes erase
-stored motion. Releasing hold requires a fresh command. Gait is reported only
+localization message and a fresh command. Hold starts asserted: motion also
+requires explicit /m20/hold=false authorization from a ready gait manager (or
+the standalone operator). Status/heartbeats remain available while held. An
+unset gait timeout never authorizes release. Releasing hold erases stored motion
+and requires a new command. This uninitialized handshake cannot move or latch
+a spurious missing-input fault. Once armed, all five T07 events are evaluated
+with monotonic time. A fault latches until an explicit node restart; recovery
+messages never reset it. Hold and pending gait changes erase stored motion.
+Gait is reported only
 from valid 1002/6 feedback from the configured UDP endpoint, never from a request.
 SIGINT/SIGTERM request a stop without invalidating ROS mid-callback. UDP zero and
 socket closure precede node/context destruction; publishing requires live ROS.
@@ -54,7 +58,7 @@ class BridgeNode(Node):
         self._stopping = False
         try:
             self._configure()
-            self._hold = False
+            self._hold = True
             self._soft_stop = False
             self._armed = False
             self._localization_ok = False
