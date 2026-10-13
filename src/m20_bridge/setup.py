@@ -18,6 +18,9 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': ['mock_m20_server = m20_bridge.mock_m20_server:main'],
+        'console_scripts': [
+            'mock_m20_server = m20_bridge.mock_m20_server:main',
+            'bridge_node = m20_bridge.bridge_node:main',
+        ],
     },
 )
