@@ -1,0 +1,10 @@
+# Example annotation only, not a measured site or a frozen decision threshold.
+# Coordinates are map-frame metres. Close each simple polygon explicitly.
+# Boundary points belong to a zone; direct zone-to-zone motion retains gait 14.
+zones:
+  - id: example_stair
+    gait: 14
+    polygon: [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]
+  - id: example_second_stair
+    gait: 14
+    polygon: [[3, 0], [5, 0], [5, 2], [3, 2], [3, 0]]
