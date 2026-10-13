@@ -78,11 +78,11 @@ trees_height:
   source: "圆柱高度：实验设计值"
 
 trees_spacing_min:
-  value: 3.0
+  value: 4.0
   source: "树木最小间距：实验设计值"
 
 trees_spacing_max:
-  value: 6.0
+  value: 8.0
   source: "树木最大间距：实验设计值"
 
 trees_offset_y:

@@ -310,3 +310,13 @@ def test_validation_rejects_missing_fields_and_non_dict():
     tampered["ramp_slope_deg"] = 15.0  # not a dict with value/source
     with pytest.raises(ValueError, match="must be a dictionary"):
         validate_world_params(tampered)
+
+
+def test_small_preserves_all_other_full_parameters():
+    """Section 5.3 permits only counts/flights/ramp/summit/name to shrink."""
+    full = validate_world_params(load_raw_world_params(HILL_WORLD_YAML))
+    small = validate_world_params(load_raw_world_params(HILL_WORLD_SMALL_YAML))
+    changed = {'world_name', 'step_count_up', 'step_count_down',
+               'flight_steps_up', 'flight_steps_down', 'ramp_length', 'summit_length'}
+    assert {k: v for k, v in small.items() if k not in changed} == {
+        k: v for k, v in full.items() if k not in changed}
