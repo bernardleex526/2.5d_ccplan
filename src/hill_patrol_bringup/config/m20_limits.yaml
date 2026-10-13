@@ -1,0 +1,13 @@
+# Schema: numeric gait ID -> {x: forward maximum (m/s), y: lateral maximum
+# (m/s), yaw: yaw maximum (rad/s)}. Consumed directly after yaml.safe_load.
+# 仿真默认限速来源：DeepRoboticsLab/sdk_deploy README
+# https://github.com/DeepRoboticsLab/sdk_deploy/blob/main/README.md
+# These simulation values are not measured M20 hardware bounds.
+1:  # Basic
+  x: 0.7
+  y: 0.5
+  yaw: 0.7
+14:  # Stair：仿真占位，P7 实测替换
+  x: 0.7
+  y: 0.5
+  yaw: 0.7
