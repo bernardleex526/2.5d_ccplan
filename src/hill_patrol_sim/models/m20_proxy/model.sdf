@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <!-- Generated from config/sensors.yaml; see generate_model.py module documentation. -->
+  <!-- Native world requires Fortress Sensors(ogre2), NavSat, Physics and spherical_coordinates. -->
+  <model name="m20_proxy" canonical_link="base_link">
+    <static>false</static>
+    <frame name="mid360_frame" attached_to="base_link">
+      <!-- SIMULATION CHOICE user delegation 2026-10-13: roof-mounted horizontal; .105m above roof clears -7deg ray over .66m to rear -->
+      <pose relative_to="base_link">0.25 0.0 0.39 0.0 0.0 0.0</pose>
+    </frame>
+    <frame name="d435i_frame" attached_to="base_link">
+      <!-- SIMULATION CHOICE user delegation 2026-10-13: front sensor origin .05m outside box, pitch15deg downward; no real extrinsic calibration -->
+      <pose relative_to="base_link">0.46 0.0 0.15 0.0 0.2617993877991494 0.0</pose>
+    </frame>
+    <frame name="gnss_frame" attached_to="base_link">
+      <!-- SIMULATION CHOICE user delegation 2026-10-13: rear roof antenna origin .075m above envelope, no specific receiver or antenna hardware -->
+      <pose relative_to="base_link">-0.2 0.0 0.36 0.0 0.0 0.0</pose>
+    </frame>
+    <frame name="d435i_optical_frame" attached_to="d435i_frame">
+      <!-- ROS REP103 optical axes x-right y-down z-forward relative to native camera x-forward y-left z-up; https://www.ros.org/reps/rep-0103.html -->
+      <pose relative_to="d435i_frame">0 0 0 -1.5707963267948966 0 -1.5707963267948966</pose>
+    </frame>
+    <link name="base_link">
+      <inertial>
+        <!-- https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+        <mass>35.0</mass>
+        <inertia>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <ixx>1.4869166666666664</ixx>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <iyy>2.908791666666666</iyy>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <izz>2.500458333333333</izz>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <ixy>0</ixy>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <ixz>0</ixz>
+          <!-- Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="standing_envelope">
+        <geometry>
+          <box>
+            <!-- https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; abstraction fills standing envelope, not exact body/legs -->
+            <size>0.82 0.43 0.57</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="standing_envelope">
+        <geometry>
+          <box>
+            <!-- https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; abstraction fills standing envelope, not exact body/legs -->
+            <size>0.82 0.43 0.57</size>
+          </box>
+        </geometry>
+      </visual>
+      <sensor name="mid360" type="gpu_lidar">
+        <!-- Rigid sensor origin coincides with sourced mounting frame -->
+        <pose relative_to="mid360_frame">0 0 0 0 0 0</pose>
+        <ignition_frame_id>mid360_frame</ignition_frame_id>
+        <always_on>true</always_on>
+        <topic>/mid360</topic>
+        <!-- https://www.livoxtech.com/mid-360s/specs typical frame rate 10Hz -->
+        <update_rate>10.0</update_rate>
+        <lidar>
+          <scan>
+            <horizontal>
+              <!-- SIMULATION CHOICE T14: 400x50 uniform rays, 200000points/s from https://www.livoxtech.com/mid-360s/specs divided by10Hz; not Livox non-repetitive pattern -->
+              <samples>400</samples>
+              <!-- SIMULATION CHOICE: one output ray per configured sample, no interpolation -->
+              <resolution>1</resolution>
+              <!-- https://www.livoxtech.com/mid-360s/specs horizontal360deg; SIMULATION CHOICE centred angles; degrees times pi/180 -->
+              <min_angle>-3.141592653589793</min_angle>
+              <!-- https://www.livoxtech.com/mid-360s/specs horizontal360deg; SIMULATION CHOICE centred angles; degrees times pi/180 -->
+              <max_angle>3.141592653589793</max_angle>
+            </horizontal>
+            <vertical>
+              <!-- SIMULATION CHOICE T14: 400x50 uniform rays, 200000points/s from https://www.livoxtech.com/mid-360s/specs divided by10Hz; not Livox non-repetitive pattern -->
+              <samples>50</samples>
+              <!-- SIMULATION CHOICE: one output ray per configured sample, no interpolation -->
+              <resolution>1</resolution>
+              <!-- https://www.livoxtech.com/mid-360s/specs typical vertical-7..52deg; degrees times pi/180 -->
+              <min_angle>-0.12217304763960307</min_angle>
+              <!-- https://www.livoxtech.com/mid-360s/specs typical vertical-7..52deg; degrees times pi/180 -->
+              <max_angle>0.9075712110370514</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <!-- https://www.livoxtech.com/mid-360s/specs blind0.1m; typical40m at10percent reflectivity, not100m cut-off; simulation ignores reflectivity -->
+            <min>0.1</min>
+            <!-- https://www.livoxtech.com/mid-360s/specs blind0.1m; typical40m at10percent reflectivity, not100m cut-off; simulation ignores reflectivity -->
+            <max>40.0</max>
+            <!-- SIMULATION CHOICE user delegation 2026-10-13: 1mm SDF range resolution, not manufacturer precision -->
+            <resolution>0.001</resolution>
+          </range>
+          <noise type="gaussian">
+            <!-- SIMULATION CHOICE user delegation 2026-10-13: unbiased independent Gaussian range noise in metres; SIMULATION APPROXIMATION https://www.livoxtech.com/mid-360s/specs <=2cm1sigma at10m25C80percent reflectivity; constant Gaussian .02m not validated over entire range -->
+            <mean>0.0</mean>
+            <!-- SIMULATION CHOICE user delegation 2026-10-13: unbiased independent Gaussian range noise in metres; SIMULATION APPROXIMATION https://www.livoxtech.com/mid-360s/specs <=2cm1sigma at10m25C80percent reflectivity; constant Gaussian .02m not validated over entire range -->
+            <stddev>0.02</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+      <sensor name="d435i" type="depth_camera">
+        <!-- Rigid sensor origin coincides with sourced mounting frame -->
+        <pose relative_to="d435i_frame">0 0 0 0 0 0</pose>
+        <ignition_frame_id>d435i_frame</ignition_frame_id>
+        <always_on>true</always_on>
+        <topic>/d435i/depth</topic>
+        <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported15Hz1280x720; SIMULATION CHOICE -->
+        <update_rate>15.0</update_rate>
+        <camera>
+          <optical_frame_id>d435i_frame</optical_frame_id>
+          <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table3-49 HD depth87x58deg; ideal square-pixel projection; degrees times pi/180 -->
+          <horizontal_fov>1.5184364492350666</horizontal_fov>
+          <image>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported1280x720; SIMULATION CHOICE HD profile -->
+            <width>1280</width>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported1280x720; SIMULATION CHOICE HD profile -->
+            <height>720</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ280mm at1280x720; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
+            <near>0.28</near>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ280mm at1280x720; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
+            <far>3.0</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <!-- SIMULATION CHOICE user delegation 2026-10-13: unbiased Gaussian depth rendering noise; SIMULATION CHOICE user delegation 2026-10-13: .01 Gaussian shader setting; not vendor accuracy. Datasheet Table4-12 specifies +/-2percent Z accuracy <=2m80percentROI HD; native shader behavior must be measured -->
+            <mean>0.0</mean>
+            <!-- SIMULATION CHOICE user delegation 2026-10-13: unbiased Gaussian depth rendering noise; SIMULATION CHOICE user delegation 2026-10-13: .01 Gaussian shader setting; not vendor accuracy. Datasheet Table4-12 specifies +/-2percent Z accuracy <=2m80percentROI HD; native shader behavior must be measured -->
+            <stddev>0.01</stddev>
+          </noise>
+        </camera>
+      </sensor>
+      <sensor name="gnss" type="navsat">
+        <!-- Rigid sensor origin coincides with sourced mounting frame -->
+        <pose relative_to="gnss_frame">0 0 0 0 0 0</pose>
+        <ignition_frame_id>gnss_frame</ignition_frame_id>
+        <always_on>true</always_on>
+        <topic>/gnss/fix</topic>
+        <!-- SIMULATION CHOICE user delegation 2026-10-13:5Hz independent NavSat; contextual https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf Tables1-3 rates depend on constellations; no MAX-M10S/RTK equivalence claim -->
+        <update_rate>5.0</update_rate>
+        <gps>
+          <position_sensing>
+            <horizontal>
+              <noise type="gaussian">
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: angular Gaussian2e-7deg; Fortress sensors6.9 NavSat applies horizontal noise to latitude/longitude degrees despite SDF metres schema: https://github.com/gazebosim/gz-sensors/blob/ignition-sensors6_6.9.0/src/NavSatSensor.cc ; ~2cm at midlatitudes, no uniformENU guarantee -->
+                <mean>0.0</mean>
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: angular Gaussian2e-7deg; Fortress sensors6.9 NavSat applies horizontal noise to latitude/longitude degrees despite SDF metres schema: https://github.com/gazebosim/gz-sensors/blob/ignition-sensors6_6.9.0/src/NavSatSensor.cc ; ~2cm at midlatitudes, no uniformENU guarantee -->
+                <stddev>2e-07</stddev>
+              </noise>
+            </horizontal>
+            <vertical>
+              <noise type="gaussian">
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent altitude Gaussian .03m, not measured/RTK claim -->
+                <mean>0.0</mean>
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent altitude Gaussian .03m, not measured/RTK claim -->
+                <stddev>0.03</stddev>
+              </noise>
+            </vertical>
+          </position_sensing>
+          <velocity_sensing>
+            <horizontal>
+              <noise type="gaussian">
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent velocity Gaussian .05m/s; contextual u-blox MAX-M10S Table1 velocity accuracy .05m/s at stated conditions is not a Gaussian sigma -->
+                <mean>0.0</mean>
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent velocity Gaussian .05m/s; contextual u-blox MAX-M10S Table1 velocity accuracy .05m/s at stated conditions is not a Gaussian sigma -->
+                <stddev>0.05</stddev>
+              </noise>
+            </horizontal>
+            <vertical>
+              <noise type="gaussian">
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent velocity Gaussian .05m/s; contextual u-blox MAX-M10S Table1 velocity accuracy .05m/s at stated conditions is not a Gaussian sigma -->
+                <mean>0.0</mean>
+                <!-- SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s; SIMULATION CHOICE user delegation 2026-10-13: independent velocity Gaussian .05m/s; contextual u-blox MAX-M10S Table1 velocity accuracy .05m/s at stated conditions is not a Gaussian sigma -->
+                <stddev>0.05</stddev>
+              </noise>
+            </vertical>
+          </velocity_sensing>
+        </gps>
+      </sensor>
+    </link>
+  </model>
+</sdf>
