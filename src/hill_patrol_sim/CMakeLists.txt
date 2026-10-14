@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.16)
+project(hill_patrol_sim)
+
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+find_package(ignition-gazebo6 REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
+add_library(kinematic_follower SHARED src/kinematic_follower.cc)
+target_compile_features(kinematic_follower PRIVATE cxx_std_17)
+target_link_libraries(kinematic_follower PRIVATE ignition-gazebo6::ignition-gazebo6 yaml-cpp)
+target_compile_options(kinematic_follower PRIVATE -Wall -Wextra -Wpedantic)
+install(TARGETS kinematic_follower LIBRARY DESTINATION lib)
+ament_python_install_package(${PROJECT_NAME})
+install(DIRECTORY config models worlds DESTINATION share/${PROJECT_NAME})
+ament_package()
