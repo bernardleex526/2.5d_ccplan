@@ -140,11 +140,9 @@
         </collision>
         <visual name="visual">
           <geometry>
-            <heightmap>
-              <uri>hill_world_small_heightmap.png</uri>
-              <size>5.0 1.5 0.1</size>
-              <pos>0 0 0</pos>
-            </heightmap>
+            <mesh>
+              <uri>hill_world_small_terrain_visual.stl</uri>
+            </mesh>
           </geometry>
           <material>
             <ambient>.45 .4 .3 1</ambient>
