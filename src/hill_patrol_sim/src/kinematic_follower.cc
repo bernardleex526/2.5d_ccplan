@@ -307,7 +307,6 @@ class KinematicFollower final : public sim::System,
   }
 
   private: sim::Model model{sim::kNullEntity};
-  private: ignition::transport::Node node;
   private: ignition::transport::Node::Publisher truth, imu;
   private: msgs::Pose poseMessage;
   private: msgs::IMU imuMessage;
@@ -316,6 +315,9 @@ class KinematicFollower final : public sim::System,
   private: std::mutex mutex;
   private: std::array<double, 3> axis{0, 0, 0};
   private: int gait{1};  // Existing mock protocol initial applied gait, not invented feedback.
+  // Declared after the mutex and command state it guards so the transport node,
+  // and with it callback delivery, is torn down before what the callbacks lock.
+  private: ignition::transport::Node node;
   private: math::Vector3d halfSize, gravity, previousVelocity;
   private: math::Pose3d pose, initial, previousPose;
   private: std::chrono::steady_clock::duration period{}, nextImu{}, lastTime{};
