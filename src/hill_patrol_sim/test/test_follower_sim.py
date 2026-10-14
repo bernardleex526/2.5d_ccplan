@@ -165,8 +165,9 @@ def test_installed_follower(follower_launch):
     try:
         observe(lambda: len(poses)>100 and len(imus)>20)
         stationary = imus[-20:]
-        gravity_error = max(abs(math.sqrt(sum(getattr(m.linear_acceleration, k)**2
-                                   for k in ('x', 'y', 'z')))-data['gravity']) for m in stationary)
+        magnitudes = [math.sqrt(sum(getattr(m.linear_acceleration, k)**2
+                                    for k in ('x', 'y', 'z'))) for m in stationary]
+        gravity_error = max(abs(value-data['gravity']) for value in magnitudes)
         assert all(m.header.frame_id == 'base_link' for m in stationary)
         assert math.isfinite(gravity_error)
         # Lifecycle: the plugin takes gravity from the world ECS at first
@@ -238,6 +239,8 @@ def test_installed_follower(follower_launch):
                    for m in imus for k in ('x', 'y', 'z'))
         thresholds.report('elev_err_m', max(errors))
         diagnostics = {'scenario': data['scenario'], 'support_error_m': max(errors),
+                       'scene_gravity_m_s2': data['gravity'],
+                       'imu_gravity_magnitude_m_s2': max(magnitudes),
                        'imu_gravity_err_m_s2': gravity_error, 'imu_rate_hz': rate,
                        'configured_imu_hz': IMU_HZ, 'imu_rate_err_hz': abs(rate-IMU_HZ),
                        'pose_count': len(movement), 'imu_count': len(imus),
