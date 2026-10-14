@@ -144,11 +144,6 @@
               <uri>hill_world_small_heightmap.png</uri>
               <size>5.0 1.5 0.1</size>
               <pos>0 0 0</pos>
-              <texture>
-                <size>1</size>
-                <diffuse>hill_world_small_terrain_diffuse.png</diffuse>
-                <normal>hill_world_small_terrain_normal.png</normal>
-              </texture>
             </heightmap>
           </geometry>
           <material>
