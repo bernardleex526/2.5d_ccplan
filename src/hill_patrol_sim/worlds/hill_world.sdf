@@ -710,7 +710,12 @@
             <heightmap>
               <uri>hill_world_heightmap.png</uri>
               <size>30.0 1.5 0.1</size>
-              <pos>0 0 0</pos>
+              <pos>222.11851652578136 0 80.17638090205045</pos>
+              <texture>
+                <size>1</size>
+                <diffuse>hill_world_terrain_diffuse.png</diffuse>
+                <normal>hill_world_terrain_normal.png</normal>
+              </texture>
             </heightmap>
           </geometry>
           <material>
