@@ -16,13 +16,6 @@ visual design only. These are not site measurements or decision thresholds.
 Tree feature cylinders extend from ground to support(x)+configured height;
 their upper four metres flank the route, rather than floating in midair.
 Generated mesh/image resources live beside the SDF and use relative URIs.
-Heightmap visuals have an authored constant brown diffuse and flat normal layer:
-Fortress rendering6 6.6.4 Terra references detailCol0 even for zero-texture
-heightmaps; explicit detail textures avoid that native shader defect without
-altering the shared height samples, collision, or support surface.
-Terra vertices bypass parent link transforms in Fortress rendering6: the visual
-heightmap descriptor therefore carries the world centre explicitly. Collision
-remains link-local at zero, preserving DART placement and all physical geometry.
 Numeric text uses Python's round-trip representation across SDF, STL and CSV;
 paired dimensions and poses retain the same binary floating-point values.
 No sensors or decision thresholds are generated here (T14/P13 checkpoint).
@@ -223,30 +216,9 @@ def generate_world(config, output_dir):
             image.putdata(profile * 129)
             image_path = out / f'{name}_heightmap.png'
             image.save(image_path)
-            summit = solid(path_model, 'summit_uneven', [x+p['summit_length']/2,0,z,0,0,0], 'heightmap',
-                           {'uri':image_path.name, 'size':numbers([p['summit_length'],width,p['summit_roughness_max']]),
-                            'pos':'0 0 0'}, '.45 .4 .3 1')
-            # SceneManager passes heightmap.pos directly to Ogre2Heightmap;
-            # Terra emits world vertices without the parent link transform.
-            # DART attaches the collision to this link, so only the visual pos
-            # is world-space. The static path model has an identity pose.
-            summit.find('visual/geometry/heightmap/pos').text = numbers(
-                [x+p['summit_length']/2, 0, z])
-            # SetMaterial is a no-op for Ogre2Heightmap. A nonempty normal map
-            # routes this layer to TERRA_DETAIL0, including square terrains;
-            # a diffuse-only base layer can still reference undeclared detailCol0.
-            # Source: gz-rendering ignition-rendering6_6.6.4 Ogre2Heightmap.cc
-            # and ogre2/src/media/Hlms/Terra/ign/100.ign_CustomWeights_piece_ps.any.
-            # Brown intent (.45,.4,.3) is quantized to 8-bit RGB (115,102,76)
-            # in the diffuse texture; this is authored display colour, not a
-            # measured reflectance or a physical linear-light material match.
-            # RGB (128,128,255) is the quantized flat tangent-space normal.
-            texture = ET.SubElement(summit.find('visual/geometry/heightmap'), 'texture')
-            text(texture, 'size', '1')
-            for key, pixels in [('diffuse', (115,102,76)), ('normal', (128,128,255))]:
-                texture_path = out / f'{name}_terrain_{key}.png'
-                Image.new('RGB', (2,2), pixels).save(texture_path)
-                text(texture, key, texture_path.name)
+            solid(path_model, 'summit_uneven', [x+p['summit_length']/2,0,z,0,0,0], 'heightmap',
+                  {'uri':image_path.name, 'size':numbers([p['summit_length'],width,p['summit_roughness_max']]),
+                   'pos':'0 0 0'}, '.45 .4 .3 1')
             segments.append((x,x+p['summit_length'],z,z,'summit_uneven'))
             x += p['summit_length']
             flat(landing, 'summit_exit')
