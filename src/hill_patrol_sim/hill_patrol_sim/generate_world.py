@@ -16,12 +16,6 @@ visual design only. These are not site measurements or decision thresholds.
 Tree feature cylinders extend from ground to support(x)+configured height;
 their upper four metres flank the route, rather than floating in midair.
 Generated mesh/image resources live beside the SDF and use relative URIs.
-The summit visual is a link-local triangular mesh of the same 129 x samples
-and full y extent as the collision heightmap. Fortress rendering6 6.6.4 Terra
-crops 2^n+1 images to 2^n samples, losing the final interval; a faithful mesh
-preserves every sample, both endpoints and the original pitch without changing
-the DART collision geometry. The generated profile is y-invariant, so two
-side vertices per x sample describe exactly the same piecewise-linear surface.
 Numeric text uses Python's round-trip representation across SDF, STL and CSV;
 paired dimensions and poses retain the same binary floating-point values.
 No sensors or decision thresholds are generated here (T14/P13 checkpoint).
@@ -144,28 +138,6 @@ def wedge(path, length, width, z0, z1):
     path.write_text('\n'.join(lines + ['endsolid ramp'])+'\n')
 
 
-def summit_surface(path, profile, length, width, roughness):
-    """Exact top surface of the y-invariant collision heightmap, link-local."""
-    intervals = len(profile) - 1
-    lines = ['solid summit_surface']
-    for column in range(intervals):
-        x0 = -length/2 + length*column/intervals
-        x1 = -length/2 + length*(column+1)/intervals
-        z0 = profile[column]/255*roughness
-        z1 = profile[column+1]/255*roughness
-        a, b = (x0,-width/2,z0), (x1,-width/2,z1)
-        c, d = (x1,width/2,z1), (x0,width/2,z0)
-        # Both upward triangles share z(x); a diagonal cannot alter this plane.
-        nx, nz = -(z1-z0), x1-x0
-        norm = math.hypot(nx, nz)
-        normal = numbers([nx/norm, 0., nz/norm])
-        for triangle in ((a,b,c), (a,c,d)):
-            lines.extend(['facet normal '+normal, 'outer loop'])
-            lines.extend('vertex '+numbers(point) for point in triangle)
-            lines.extend(['endloop', 'endfacet'])
-    path.write_text('\n'.join(lines + ['endsolid summit_surface'])+'\n')
-
-
 def generate_world(config, output_dir):
     p = load_params(config)
     out = Path(output_dir)
@@ -244,18 +216,9 @@ def generate_world(config, output_dir):
             image.putdata(profile * 129)
             image_path = out / f'{name}_heightmap.png'
             image.save(image_path)
-            summit = solid(path_model, 'summit_uneven', [x+p['summit_length']/2,0,z,0,0,0], 'heightmap',
-                           {'uri':image_path.name, 'size':numbers([p['summit_length'],width,p['summit_roughness_max']]),
-                            'pos':'0 0 0'}, '.45 .4 .3 1')
-            # Ogre2 Terra crops the final row/column of this collision image.
-            # Replace only the visual; the original heightmap, link pose,
-            # material and collision remain unchanged.
-            visual_path = out / f'{name}_terrain_visual.stl'
-            summit_surface(visual_path, profile, p['summit_length'], width,
-                           p['summit_roughness_max'])
-            geometry = summit.find('visual/geometry')
-            geometry.remove(geometry.find('heightmap'))
-            text(ET.SubElement(geometry, 'mesh'), 'uri', visual_path.name)
+            solid(path_model, 'summit_uneven', [x+p['summit_length']/2,0,z,0,0,0], 'heightmap',
+                  {'uri':image_path.name, 'size':numbers([p['summit_length'],width,p['summit_roughness_max']]),
+                   'pos':'0 0 0'}, '.45 .4 .3 1')
             segments.append((x,x+p['summit_length'],z,z,'summit_uneven'))
             x += p['summit_length']
             flat(landing, 'summit_exit')
