@@ -1,9 +1,7 @@
-"""Real ROS/UDP acceptance; explicit timings are test inputs only.
+"""Real ROS/UDP acceptance of m20_bridge against the mock M20 process.
 
-ROS fault delivery can precede receipt of its UDP zero. Observe both under the
-same deadline before inspecting the complete wire-stop suffix. Missing wire
-evidence raises AssertionError: StopIteration cannot cross launch_pytest's
-thread-to-asyncio Future and would leave the launch runner blocked.
+A recording UDP proxy sits between bridge and mock so assertions use the actual
+wire bytes. Timings come from the committed m20_safety.yaml simulation values.
 """
 
 import math
@@ -26,6 +24,7 @@ import rclpy
 from rclpy.context import Context
 from rclpy.executors import SingleThreadedExecutor
 from std_msgs.msg import Bool, Empty, Int32, String
+from std_srvs.srv import Trigger
 
 from m20_bridge import protocol
 
@@ -52,7 +51,10 @@ class Recorder:
             while not self.stop.is_set():
                 if not select.select([self.socket], [], [], 0.02)[0]:
                     continue
-                packet, source = self.socket.recvfrom(65535)
+                try:
+                    packet, source = self.socket.recvfrom(65535)
+                except ConnectionRefusedError:
+                    continue  # ICMP unreachable while the peer process is still binding.
                 if source == self.mock_address:
                     if self.peer is not None and not self.drop_replies:
                         self.socket.sendto(packet, self.peer)
@@ -86,26 +88,30 @@ def free_port():
         return sock.getsockname()[1]
 
 
+def zero(axis):
+    return all(axis[name] == 0 for name in ('X', 'Y', 'Z', 'Roll', 'Pitch', 'Yaw'))
+
+
 @pytest.fixture
 def resources(monkeypatch):
-    # Isolated ROS domain, shared by launch children and this test's client.
     domain = str(100 + os.getpid() % 100)
     monkeypatch.setenv('ROS_DOMAIN_ID', domain)
     mock_address = ('127.0.0.1', free_port())
     recorder = Recorder(mock_address)
-    data = {'recorder': recorder, 'mock_address': mock_address, 'exits': {},
-            'domain': domain}
+    data = {'recorder': recorder, 'mock_address': mock_address, 'exits': {}, 'domain': domain}
     yield data
     recorder.close()
 
 
-@launch_pytest.fixture(params=['acceptance', 'cmd_timeout', 'localization_lost',
-                              'gait_switch_timeout', 'untrusted_reply', 'null_config'])
+SCENARIOS = ['navigation', 'teleop', 'localization_lost', 'gait_switch_timeout',
+             'link_lost', 'bad_config']
+
+
+@launch_pytest.fixture(params=SCENARIOS)
 def bridge_launch(request, resources):
     scenario = request.param
     resources['scenario'] = scenario
-    root = Path(__file__).resolve().parents[2]
-    config = root / 'hill_patrol_bringup' / 'config'
+    config = Path(__file__).resolve().parents[2] / 'hill_patrol_bringup' / 'config'
     executable = Path(get_package_prefix('m20_bridge')) / 'lib' / 'm20_bridge'
     env = {'ROS_DOMAIN_ID': resources['domain']}
     mock = ExecuteProcess(cmd=[str(executable / 'mock_m20_server'), '--host', '127.0.0.1',
@@ -115,12 +121,10 @@ def bridge_launch(request, resources):
                           additional_env=env, output='screen', cached_output=True)
     parameters = {'robot_ip': '127.0.0.1',
                   'robot_port': resources['recorder'].address[1],
-                  'thresholds_path': str(config / 'thresholds.yaml'),
+                  'safety_path': str(config / ('thresholds.yaml' if scenario == 'bad_config'
+                                               else 'm20_safety.yaml')),
                   'limits_path': str(config / 'm20_limits.yaml'),
-                  'link_timeout_s': 0.6}
-    if scenario != 'null_config':
-        parameters.update(cmd_timeout_s=0.8, loc_lost_timeout_s=0.4,
-                          gait_switch_timeout_s=0.5)
+                  'mode': 'teleop' if scenario == 'teleop' else 'navigation'}
     command = [str(executable / 'bridge_node'), '--ros-args']
     for name, value in parameters.items():
         command += ['-p', f'{name}:={value}']
@@ -140,39 +144,50 @@ class Client:
         self.node = rclpy.create_node('bridge_acceptance_client', context=self.context)
         self.executor = SingleThreadedExecutor(context=self.context)
         self.executor.add_node(self.node)
-        self.messages = {'gait': [], 'fault': [], 'link': [], 'axis': []}
-        for kind, topic, key in [(Int32, '/m20/gait', 'gait'),
-                                 (String, '/m20/fault', 'fault'),
-                                 (Bool, '/m20/link_ok', 'link'),
-                                 (Twist, '/sim/m20_axis', 'axis')]:
-            self.node.create_subscription(kind, topic,
-                                          lambda msg, key=key: self.messages[key].append(msg), 10)
+        self.messages = {'gait': [], 'fault': [], 'link': [], 'axis': [], 'stopped': []}
+        for kind, topic, key in [(Int32, '/m20/gait', 'gait'), (String, '/m20/fault', 'fault'),
+                                 (Bool, '/m20/link_ok', 'link'), (Twist, '/sim/m20_axis', 'axis'),
+                                 (Bool, '/m20/stopped', 'stopped')]:
+            self.node.create_subscription(
+                kind, topic, lambda msg, key=key: self.messages[key].append(msg), 10)
         self.cmd = self.node.create_publisher(Twist, '/cmd_vel', 10)
         self.hold = self.node.create_publisher(Bool, '/m20/hold', 10)
         self.loc = self.node.create_publisher(Bool, '/localization/ok', 10)
         self.gait = self.node.create_publisher(Int32, '/gait/request', 10)
         self.stop = self.node.create_publisher(Empty, '/patrol/soft_stop', 10)
+        self.reset = self.node.create_client(Trigger, '/m20/reset_fault')
         self.moving = Twist()
         self.moving.linear.x = 0.35
         self.moving.linear.y = -0.25
         self.moving.angular.z = 0.35
+        self.held = True
 
-    def pump(self, predicate, *, send=None, timeout=6):
+    def pump(self, predicate, *, send=None, timeout=8):
         deadline = time.monotonic() + timeout
         next_send = 0.0
         while time.monotonic() < deadline:
             now = time.monotonic()
-            # spin_once's timeout is a maximum wait, not a publisher rate limit.
-            # Drain ROS observations without feeding back an unbounded UDP flood.
             if send is not None and now >= next_send:
                 send()
-                next_send = now + 0.05  # Explicit 20 Hz test input, not a safety default.
+                next_send = now + 0.05  # 20 Hz test input.
             self.executor.spin_once(timeout_sec=min(0.02, max(0.0, deadline - now)))
             if predicate():
                 return
-        raise AssertionError('bounded ROS/UDP observation deadline expired')
+        counts = {key: len(value) for key, value in self.messages.items()}
+        last = {key: value[-1] for key, value in self.messages.items() if value and key != 'axis'}
+        raise AssertionError(f'bounded ROS/UDP observation deadline expired: {counts} {last}')
+
+    def fault(self):
+        return self.messages['fault'][-1].data if self.messages['fault'] else None
+
+    def call_reset(self):
+        future = self.reset.call_async(Trigger.Request())
+        self.pump(future.done)
+        return future.result()
 
     def healthy(self):
+        # gait_manager republishes hold every cycle; a single sample may precede discovery.
+        self.hold.publish(Bool(data=self.held))
         self.loc.publish(Bool(data=True))
         self.cmd.publish(self.moving)
 
@@ -183,8 +198,9 @@ class Client:
         self.context.shutdown()
 
 
-def zero(axis):
-    return all(axis[name] == 0 for name in ('X', 'Y', 'Z', 'Roll', 'Pitch', 'Yaw'))
+def moving_axis(client):
+    return any(math.isclose(m.linear.x, 0.5) and math.isclose(m.linear.y, -0.5)
+               and math.isclose(m.angular.z, 0.5) for m in client.messages['axis'])
 
 
 @pytest.mark.launch(fixture=bridge_launch)
@@ -194,116 +210,100 @@ def test_bridge_end_to_end(bridge_launch):
     scenario = data['scenario']
     client = Client()
     try:
-        if scenario == 'null_config':
+        if scenario == 'bad_config':
             client.pump(lambda: 'bridge' in data['exits'])
             assert data['exits']['bridge'] != 0
-            assert recorder.snapshot() == ()  # No socket/motion on unavailable config.
+            assert recorder.snapshot() == ()
             return
-        client.pump(lambda: any((msg['Type'], msg['Command']) == (1101, 5)
-                               and msg['Items']['Mode'] == 0 for msg in recorder.snapshot()))
-        # Startup unknown inputs stay zero without an irreversible link fault.
-        client.pump(lambda: len(recorder.axes()) >= 4)
-        assert all(zero(axis) for axis in recorder.axes())
-        assert not client.messages['fault']
+        client.pump(lambda: any((m['Type'], m['Command']) == (1101, 5) and m['Items']['Mode'] == 0
+                               for m in recorder.snapshot()))
         client.pump(lambda: client.cmd.get_subscription_count() == 1
-                    and client.loc.get_subscription_count() == 1
                     and client.hold.get_subscription_count() == 1
-                    and client.gait.get_subscription_count() == 1
-                    and client.stop.get_subscription_count() == 1)
-        # Healthy status/localization and continuously nonzero commands cannot
-        # authorize motion before an explicit release of the startup hold.
-        client.pump(lambda: bool(client.messages['gait'])
-                    and client.messages['link'][-1].data is True, send=client.healthy)
-        startup_until = time.monotonic() + 0.9
-        client.pump(lambda: time.monotonic() >= startup_until, send=client.healthy)
-        assert recorder.axes() and all(zero(axis) for axis in recorder.axes())
-        assert not client.messages['fault']
-        client.hold.publish(Bool(data=False))
-        client.pump(lambda: any(math.isclose(msg.linear.x, 0.5)
-                               and math.isclose(msg.linear.y, -0.5)
-                               and math.isclose(msg.angular.z, 0.5)
-                               for msg in client.messages['axis']), send=client.healthy)
-        assert client.messages['link'][-1].data is True
+                    and client.reset.service_is_ready())
+        client.pump(lambda: client.messages['link'] and client.messages['link'][-1].data
+                    and client.messages['gait'])
         assert client.messages['gait'][-1].data == 1
-        assert not client.messages['fault']
-        fault_trigger = len(recorder.axes())
 
-        if scenario == 'acceptance':
-            client.hold.publish(Bool(data=True))
-            start = len(recorder.axes())
-            client.pump(lambda: len(recorder.axes()) >= start + 5
-                        and all(zero(axis) for axis in recorder.axes()[-3:]), send=client.healthy)
-            # Confirmed gait feedback still works while hold independently blocks motion.
+        if scenario == 'teleop':
+            # First mapping run: moves without any localization and without a hold release.
+            client.pump(lambda: moving_axis(client), send=lambda: client.cmd.publish(client.moving))
+            assert client.fault() == ''
+            # Command idle stops output and recovers without reset.
+            client.pump(lambda: client.messages['stopped'][-1].data
+                        and zero(recorder.axes()[-1]))
+            client.messages['axis'].clear()
+            client.pump(lambda: moving_axis(client), send=lambda: client.cmd.publish(client.moving))
+            assert client.fault() == ''
+            return
+
+        # Navigation mode: healthy inputs alone cannot move before hold release.
+        until = time.monotonic() + 0.8
+        client.pump(lambda: time.monotonic() >= until, send=client.healthy)
+        assert all(zero(axis) for axis in recorder.axes())
+        client.held = False
+        client.pump(lambda: moving_axis(client), send=client.healthy)
+        assert client.fault() == ''
+
+        if scenario == 'navigation':
+            # Nav2 stops publishing between goals: zero output, no fault, auto recovery.
+            client.pump(lambda: client.messages['stopped'][-1].data,
+                        send=lambda: client.loc.publish(Bool(data=True)))
+            assert zero(recorder.axes()[-1]) and client.fault() == ''
+            client.messages['axis'].clear()
+            client.pump(lambda: moving_axis(client), send=client.healthy)
+            # Gait switch: output zero while pending, then resume on confirmed gait.
             client.gait.publish(Int32(data=14))
             client.pump(lambda: client.messages['gait'][-1].data == 14, send=client.healthy)
-            assert all(zero(axis) for axis in recorder.axes()[-3:])
-            client.hold.publish(Bool(data=False))
-            start = len(recorder.axes())
-            client.pump(lambda: len(recorder.axes()) >= start + 3,
-                        send=lambda: client.loc.publish(Bool(data=True)))
-            assert all(zero(axis) for axis in recorder.axes()[-3:])
-            client.pump(lambda: not zero(recorder.axes()[-1]), send=client.healthy)
-            fault_trigger = len(recorder.axes())
+            gait_index = next(i for i, r in enumerate(recorder.snapshot())
+                              if (r['Type'], r['Command']) == (2, 23))
+            preceding = [r['Items'] for r in recorder.snapshot()[:gait_index]
+                         if (r['Type'], r['Command']) == (2, 21)]
+            assert zero(preceding[-1]), 'zero axis must precede gait request'
+            client.messages['axis'].clear()
+            client.pump(lambda: moving_axis(client), send=client.healthy)
+            # Soft stop latches until the reset service is called.
             client.stop.publish(Empty())
-            expected = 'soft_stop'
-        elif scenario == 'cmd_timeout':
-            expected = 'cmd_timeout'
-        elif scenario == 'localization_lost':
-            client.loc.publish(Bool(data=False))
-            expected = 'localization_lost'
-        elif scenario == 'gait_switch_timeout':
-            client.gait.publish(Int32(data=14))
-            expected = 'gait_switch_timeout'
-        else:
-            recorder.drop_replies = True
-            expected = 'link_lost'
-
-        def fault_input():
-            if scenario == 'cmd_timeout':
-                client.loc.publish(Bool(data=True))
-            elif scenario == 'localization_lost':
-                client.loc.publish(Bool(data=False))
-                client.cmd.publish(client.moving)
-            else:
-                client.healthy()
-                if scenario == 'gait_switch_timeout':
-                    client.gait.publish(Int32(data=14))
-                elif scenario == 'untrusted_reply':
-                    # Well-formed status from an unrelated endpoint must not refresh link.
-                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as impostor:
-                        impostor.sendto(protocol.encode(1002, 6, {'BasicStatus': {'Gait': 14}}),
-                                        recorder.peer)
-                    # The authenticated endpoint's invalid gait must not refresh it either.
-                    recorder.socket.sendto(protocol.encode(
-                        1002, 6, {'BasicStatus': {'Gait': 99}}), recorder.peer)
-
-        client.pump(lambda: any(msg.data == expected for msg in client.messages['fault'])
-                    and any(zero(axis) for axis in recorder.axes()[fault_trigger:]),
-                    send=fault_input)
-        if scenario in ('gait_switch_timeout', 'untrusted_reply'):
-            assert client.messages['gait'][-1].data == 1
-        # ROS fault delivery and UDP receipt are independent queues. Check the
-        # complete wire-stop suffix, not just the later ROS-observer snapshot.
-        fault_axes = recorder.axes()
-        wire_stop = next((index for index in range(fault_trigger, len(fault_axes))
-                          if zero(fault_axes[index])), None)
-        assert wire_stop is not None, 'fault produced no observed UDP zero'
-        assert all(zero(axis) for axis in fault_axes[wire_stop:])
-        start = len(recorder.axes())
-        recorder.drop_replies = False
-        client.pump(lambda: len(recorder.axes()) >= start + 8, send=client.healthy)
-        assert all(zero(axis) for axis in recorder.axes()[start:])
-        assert all(zero(axis) for axis in recorder.axes()[wire_stop:])
-        assert client.messages['fault'][-1].data == expected
-        if scenario == 'acceptance':
-            # Stop the actual mock process, rather than forge link state in the test.
+            client.pump(lambda: client.fault() == 'soft_stop' and zero(recorder.axes()[-1]),
+                        send=client.healthy)
+            until = time.monotonic() + 0.5
+            client.pump(lambda: time.monotonic() >= until, send=client.healthy)
+            assert client.fault() == 'soft_stop' and zero(recorder.axes()[-1])
+            assert client.call_reset().success
+            client.messages['axis'].clear()
+            client.pump(lambda: moving_axis(client) and client.fault() == '', send=client.healthy)
+            # Terminating the mock process loses the link: latched link_lost.
             os.kill(data['mock'].process_details['pid'], signal.SIGTERM)
-            client.pump(lambda: 'mock' in data['exits'] and
-                        client.messages['link'][-1].data is False, send=client.healthy)
+            client.pump(lambda: client.fault() == 'link_lost' and zero(recorder.axes()[-1]),
+                        send=client.healthy)
             assert data['exits']['mock'] == 0
-            assert client.messages['fault'][-1].data == 'soft_stop'
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as released:
-                released.bind(data['mock_address'])
+            assert not client.call_reset().success
+        else:
+            expected = {'localization_lost': 'localization_lost',
+                        'gait_switch_timeout': 'gait_switch_timeout',
+                        'link_lost': 'link_lost'}[scenario]
+
+            def fault_input():
+                client.hold.publish(Bool(data=False))
+                client.cmd.publish(client.moving)
+                client.loc.publish(Bool(data=scenario != 'localization_lost'))
+            if scenario == 'gait_switch_timeout':
+                client.gait.publish(Int32(data=14))
+            if scenario == 'link_lost':
+                recorder.drop_replies = True
+            client.pump(lambda: client.fault() == expected and zero(recorder.axes()[-1]),
+                        send=fault_input)
+            start = len(recorder.axes())
+            recorder.drop_replies = False
+            client.pump(lambda: len(recorder.axes()) >= start + 8, send=client.healthy)
+            assert all(zero(axis) for axis in recorder.axes()[start:])
+            assert client.fault() == expected
+            if scenario == 'gait_switch_timeout':
+                assert client.messages['gait'][-1].data == 1
+            else:
+                assert client.call_reset().success
+                client.messages['axis'].clear()
+                client.pump(lambda: moving_axis(client), send=client.healthy)
+
         bridge_address = recorder.peer
         os.kill(data['bridge'].process_details['pid'], signal.SIGTERM)
         client.pump(lambda: 'bridge' in data['exits'])

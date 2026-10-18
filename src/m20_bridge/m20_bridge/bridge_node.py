@@ -1,33 +1,18 @@
 """ROS2 M20 UDP bridge; safety review is required before hardware use.
 
-Pass robot_port, thresholds_path and limits_path as ROS parameters. The three
-watchdog timing keys are loaded from thresholds.yaml; explicit parameters with
-the same names may override them for confirmed configuration or loopback tests.
-link_timeout_s is also REQUIRED: it has no inferred hardware default. Null,
-missing or invalid safety timings refuse startup before opening a UDP socket.
-The configuration files are read only; test values never replace their nulls.
+Required parameters: robot_port, limits_path, safety_path (m20_safety.yaml) and
+mode (teleop | navigation). navigation additionally requires /localization/ok;
+teleop (first mapping run) does not, because no localization exists yet.
 
-Build with the colcon ROS extension enabled (discovery must report
-ros.ament_python), then source install/local_setup.bash before ROS consumers.
-The ament_python build task generates the package's AMENT_PREFIX_PATH hook;
-installing Python modules alone does not register a usable ROS environment.
-
-Startup sends Mode=0 and zero, then waits for actual status feedback, a healthy
-localization message and a fresh command. Hold starts asserted: motion also
-requires explicit /m20/hold=false authorization from a ready gait manager (or
-the standalone operator). Status/heartbeats remain available while held. An
-unset gait timeout never authorizes release. Releasing hold erases stored motion
-and requires a new command. This uninitialized handshake cannot move or latch
-a spurious missing-input fault. Once armed, all five T07 events are evaluated
-with monotonic time. A fault latches until an explicit node restart; recovery
-messages never reset it. Hold and pending gait changes erase stored motion.
-Gait is reported only
-from valid 1002/6 feedback from the configured UDP endpoint, never from a request.
-SIGINT/SIGTERM request a stop without invalidating ROS mid-callback. UDP zero and
-socket closure precede node/context destruction; publishing requires live ROS.
+Motion is sent only while all hold: no latched fault, fresh /cmd_vel, live M20
+status link, known gait with configured limits, no pending gait change, hold
+released, and (navigation) localization ok. Otherwise zero axes are sent.
+hold starts asserted in navigation mode (gait_manager releases it) and released
+in teleop mode. Command idleness only zeroes output; latched faults need the
+/m20/reset_fault service. /m20/stopped is true once zero axes have been sent
+continuously for stopped_settle_s, so gait_manager can switch gait safely.
 """
 
-import argparse
 import math
 import signal
 import socket
@@ -41,15 +26,19 @@ from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from std_msgs.msg import Bool, Empty, Int32, String
+from std_srvs.srv import Trigger
 import yaml
 
 from . import protocol
 from .velocity_mapper import to_ratio
-from .watchdog import HeartbeatScheduler, Watchdog
+from .watchdog import HeartbeatScheduler, Watchdog, load_timings
+
+
+STATUS_QUERY_PERIOD_S = 0.1
 
 
 class BridgeNode(Node):
-    """Single-owner callbacks/timer: no socket thread or queued motion writer."""
+    """Single-threaded: callbacks update state, the steady timer sends traffic."""
 
     def __init__(self):
         super().__init__('m20_bridge')
@@ -58,9 +47,8 @@ class BridgeNode(Node):
         self._stopping = False
         try:
             self._configure()
-            self._hold = True
+            self._hold = self._mode == 'navigation'
             self._soft_stop = False
-            self._armed = False
             self._localization_ok = False
             self._command = None
             self._command_at = None
@@ -68,29 +56,30 @@ class BridgeNode(Node):
             self._gait = None
             self._pending_gait = None
             self._gait_started_at = None
-            self._reason = None
-            self._transport_failed = False
+            self._zero_since = None
+            self._last_query = -math.inf
+            self._fault = None
             self._gait_pub = self.create_publisher(Int32, '/m20/gait', 10)
             self._fault_pub = self.create_publisher(String, '/m20/fault', 10)
             self._link_pub = self.create_publisher(Bool, '/m20/link_ok', 10)
+            self._stopped_pub = self.create_publisher(Bool, '/m20/stopped', 10)
             self.create_subscription(Twist, '/cmd_vel', self._on_command, 10)
             self.create_subscription(Bool, '/m20/hold', self._on_hold, 10)
             self.create_subscription(Int32, '/gait/request', self._on_gait, 10)
             self.create_subscription(Bool, '/localization/ok', self._on_localization, 10)
             self.create_subscription(Empty, '/patrol/soft_stop', self._on_soft_stop, 10)
+            self.create_service(Trigger, '/m20/reset_fault', self._on_reset)
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._socket.setblocking(False)
             self._heartbeat = HeartbeatScheduler(self._send, interval_s=0.25)
             self._send(protocol.usage_mode(0))
-            self._zero()
-            self._heartbeat.tick()
-            self._send(protocol.encode(1002, 6, {}))
+            self._send(protocol.axis())
             self._timer = self.create_timer(
                 self._period, self._step, clock=Clock(clock_type=ClockType.STEADY_TIME))
         except BaseException:
             if self._socket is not None:
                 try:
-                    self._zero()
+                    self._socket.sendto(protocol.axis(), self._endpoint)
                 finally:
                     self._socket.close()
             super().destroy_node()
@@ -106,82 +95,59 @@ class BridgeNode(Node):
         if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
             raise ValueError('robot_port must be an explicit UDP port in 1..65535')
         self._endpoint = (socket.gethostbyname(host), port)
-        thresholds_path = self._parameter('thresholds_path', '')
-        limits_path = self._parameter('limits_path', '')
-        with open(thresholds_path, encoding='utf-8') as stream:
-            thresholds = yaml.safe_load(stream)
-        if not isinstance(thresholds, dict):
-            raise ValueError('thresholds_path must contain a threshold mapping')
-        for key in ('cmd_timeout_s', 'loc_lost_timeout_s', 'gait_switch_timeout_s'):
-            override = self._parameter(key)
-            if override is not None:
-                thresholds[key] = override
-        self._watchdog = Watchdog(thresholds)
-        self._cmd_timeout = thresholds['cmd_timeout_s']
-        self._link_timeout = self._parameter('link_timeout_s')
-        if (isinstance(self._link_timeout, bool)
-                or not isinstance(self._link_timeout, (int, float))
-                or not math.isfinite(self._link_timeout) or self._link_timeout <= 0):
-            raise ValueError('link_timeout_s requires an explicit finite positive timing')
-        with open(limits_path, encoding='utf-8') as stream:
+        self._mode = self._parameter('mode')
+        if self._mode not in ('teleop', 'navigation'):
+            raise ValueError('mode must be teleop or navigation')
+        self._timings = load_timings(self._parameter('safety_path', ''))
+        self._watchdog = Watchdog(self._timings,
+                                  require_localization=self._mode == 'navigation')
+        with open(self._parameter('limits_path', ''), encoding='utf-8') as stream:
             self._limits = yaml.safe_load(stream)
         for gait in (1, 14):
             to_ratio(Twist(), gait, self._limits)
-        # Service deadlines at least four times per smallest configured timeout.
-        self._period = min(0.05, self._link_timeout / 4,
-                           *(thresholds[key] / 4 for key in (
-                               'cmd_timeout_s', 'loc_lost_timeout_s', 'gait_switch_timeout_s')))
+        self._period = min(0.05, *(value / 4 for value in self._timings.values()))
 
     def _send(self, packet):
-        # A signal can interrupt a callback after its motion gate was computed.
+        # A signal may arrive after a callback computed its motion decision.
         self._socket.sendto(protocol.axis() if self._stopping else packet, self._endpoint)
 
-    def _zero(self):
-        self._send(protocol.axis())
-
     def _on_command(self, message):
-        self._check_watchdog()
         values = (message.linear.x, message.linear.y, message.angular.z)
-        if not all(math.isfinite(value) for value in values):
-            self._command = None
-            self._command_at = None
-            self._step()
-            return
-        self._command_at = time.monotonic()
-        self._command = (message if not self._hold and self._reason is None
-                         and self._pending_gait is None else None)
-        self._step()
+        if all(math.isfinite(value) for value in values):
+            self._command, self._command_at = message, time.monotonic()
+        else:
+            self._command, self._command_at = None, None
 
     def _on_hold(self, message):
         self._hold = message.data
-        self._command = None
-        self._step()
+        if self._hold:
+            self._step()
 
     def _on_localization(self, message):
-        self._check_watchdog()
         self._localization_ok = message.data
-        self._step()
 
     def _on_soft_stop(self, _message):
         self._soft_stop = True
-        self._command = None
         self._step()
 
     def _on_gait(self, message):
-        if message.data not in (1, 14) or not self._armed or self._reason is not None:
+        if message.data not in (1, 14) or self._fault is not None:
             return
-        # Repeated requests must not postpone an outstanding confirmation deadline.
-        if self._pending_gait is not None:
-            return
+        if self._pending_gait is not None or message.data == self._gait:
+            return  # Repeats must not postpone an outstanding confirmation deadline.
         self._pending_gait = message.data
         self._gait_started_at = time.monotonic()
-        self._command = None
-        try:
-            self._zero()
-            self._send(protocol.gait(message.data))
-        except OSError:
-            self._transport_failed = True
         self._step()
+        self._send_logged(protocol.gait(message.data))
+
+    def _on_reset(self, _request, response):
+        self._soft_stop = False
+        self._pending_gait = None
+        self._gait_started_at = None
+        response.success = self._watchdog.reset(**self._events())
+        self._fault = self._watchdog.fault
+        response.message = 'fault cleared' if response.success else f'still active: {self._fault}'
+        return response
 
     def _receive(self):
         # Bounded draining prevents packet floods from starving the stop deadlines.
@@ -190,6 +156,9 @@ class BridgeNode(Node):
                 payload, source = self._socket.recvfrom(65535)
             except BlockingIOError:
                 return
+            except OSError as error:
+                self.get_logger().warning(f'receive failed: {error}')
+                return
             if source != self._endpoint:
                 continue
             try:
@@ -197,7 +166,7 @@ class BridgeNode(Node):
                 if (message['Type'], message['Command']) != (1002, 6):
                     continue
                 gait = message['Items']['BasicStatus']['Gait']
-                if isinstance(gait, bool) or not isinstance(gait, int) or gait not in (1, 14):
+                if isinstance(gait, bool) or not isinstance(gait, int):
                     continue
             except (ValueError, KeyError, TypeError, UnicodeError):
                 continue
@@ -207,79 +176,67 @@ class BridgeNode(Node):
                 self._pending_gait = None
                 self._gait_started_at = None
 
-    def _check_watchdog(self):
-        # Observe expired deadlines BEFORE a newly arrived input can clear them.
-        now = time.monotonic()
-        link_ok = (not self._transport_failed and self._reply_at is not None
-                   and now - self._reply_at < self._link_timeout)
-        if self._armed or self._soft_stop or self._transport_failed:
-            self._reason = self._watchdog.evaluate(
-                latest_cmd_vel_time=self._command_at,
-                localization_ok=self._localization_ok, link_ok=link_ok,
-                gait_switch_started_at=self._gait_started_at, soft_stop=self._soft_stop)
+    def _link_ok(self):
+        return (self._reply_at is not None
+                and time.monotonic() - self._reply_at < self._timings['link_timeout_s'])
+
+    def _events(self):
+        return dict(latest_cmd_vel_time=self._command_at,
+                    localization_ok=self._localization_ok, link_ok=self._link_ok(),
+                    gait_switch_started_at=self._gait_started_at, soft_stop=self._soft_stop)
+
+    def _send_logged(self, packet):
+        try:
+            self._send(packet)
+        except OSError as error:
+            self.get_logger().warning(f'send failed: {error}')
 
     def _step(self):
         if self._closed:
             return
         if self._stopping or not self.context.ok():
-            self._zero()
+            self._send_logged(protocol.axis())
             return
+        self._receive()
         try:
-            self._check_watchdog()
-            self._receive()
             self._heartbeat.tick()
-            self._send(protocol.encode(1002, 6, {}))
-            self._evaluate_and_send()
-        except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
-            # No recovery path may resume motion after a transport/scheduler failure.
-            self._transport_failed = True
-            self._command = None
-            self.get_logger().error(str(error))
-            self._evaluate_and_send(send_motion=False)
-
-    def _evaluate_and_send(self, *, send_motion=True):
+        except OSError as error:
+            self.get_logger().warning(f'heartbeat send failed: {error}')
         now = time.monotonic()
-        link_ok = (not self._transport_failed and self._reply_at is not None
-                   and now - self._reply_at < self._link_timeout)
-        fresh = self._command_at is not None and now - self._command_at < self._cmd_timeout
-        if link_ok and self._localization_ok and fresh and self._gait is not None:
-            self._armed = True
-        self._check_watchdog()
-        safe = (send_motion and not self._stopping and self.context.ok()
-                and self._armed and link_ok and self._localization_ok
-                and fresh and self._reason is None and not self._hold
-                and self._pending_gait is None and self._command is not None)
-        if not safe:
-            self._command = None
-        try:
-            if safe:
-                x, y, yaw = to_ratio(self._command, self._gait, self._limits)
-                self._send(protocol.axis(x=x, y=y, yaw=yaw))
-            else:
-                self._zero()
-        except OSError:
-            self._transport_failed = True
-            self._command = None
-            self._check_watchdog()
-            link_ok = False
-        if self._stopping or not self.context.ok():
-            self._zero()
-            return
+        if now - self._last_query >= STATUS_QUERY_PERIOD_S:
+            self._send_logged(protocol.encode(1002, 6, {}))
+            self._last_query = now
+        status = self._watchdog.evaluate(**self._events())
+        self._fault = status.fault
+        link_ok = self._link_ok()
+        move = (self._fault is None and not status.idle and link_ok
+                and (self._localization_ok or self._mode == 'teleop')
+                and not self._hold and self._pending_gait is None
+                and self._gait in (1, 14) and self._command is not None)
+        if move:
+            x, y, yaw = to_ratio(self._command, self._gait, self._limits)
+            move = (x, y, yaw) != (0.0, 0.0, 0.0)
+        self._send_logged(protocol.axis(x=x, y=y, yaw=yaw) if move else protocol.axis())
+        if move:
+            self._zero_since = None
+        elif self._zero_since is None:
+            self._zero_since = now
+        stopped = (self._zero_since is not None
+                   and now - self._zero_since >= self._timings['stopped_settle_s'])
         self._link_pub.publish(Bool(data=link_ok))
+        self._stopped_pub.publish(Bool(data=stopped))
+        self._fault_pub.publish(String(data=self._fault or ''))
         if self._gait is not None:
             self._gait_pub.publish(Int32(data=self._gait))
-        if self._reason is not None:
-            self._fault_pub.publish(String(data=self._reason))
 
     def destroy_node(self):
         if not self._closed:
             self._closed = True
             if hasattr(self, '_timer'):
                 self._timer.cancel()
-            self._command = None
             if self._socket is not None:
                 try:
-                    self._zero()
+                    self._socket.sendto(protocol.axis(), self._endpoint)
                 except OSError:
                     pass
                 finally:
@@ -288,10 +245,7 @@ class BridgeNode(Node):
 
 
 def main(args=None):
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    _, ros_args = parser.parse_known_args(args)
-    rclpy.init(args=ros_args, signal_handler_options=SignalHandlerOptions.NO)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = None
     executor = SingleThreadedExecutor()
     stopping = False

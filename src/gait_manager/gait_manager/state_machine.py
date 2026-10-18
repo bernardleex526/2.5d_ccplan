@@ -1,37 +1,48 @@
-"""T10 pure gait handshake, with an injected monotonic clock.
+"""Pure gait handshake: hold -> bridge confirms stopped -> request gait -> confirmed -> release.
 
-A fresh zero velocity observation is required after hold begins. The adapter
-must state what its observation measures; the planned ROS adapter observes
-commanded planar velocity, not physical body speed. FAULT is latched. Manual
-reset is permitted only with observed gait 1 and zero velocity.
+Stopped evidence is the bridge's /m20/stopped (zero axes actually sent for its
+settle time), not upstream /cmd_vel: Nav2 keeps commanding motion while held.
+A stopped=True observation counts only once settle_s has elapsed since hold
+began, so a sample published before the bridge saw hold cannot complete the
+stop. The whole handshake shares one deadline; expiry latches FAULT.
 """
 import math
 from numbers import Real
 import time
 
 
+def _positive(name, value):
+    if (isinstance(value, bool) or not isinstance(value, Real)
+            or not math.isfinite(value) or value <= 0):
+        raise ValueError(f'{name} must be finite and positive')
+    return value
+
+
 class GaitStateMachine:
-    def __init__(self, switch_timeout_s, clock=time.monotonic):
-        if (isinstance(switch_timeout_s, bool) or
-                not isinstance(switch_timeout_s, Real) or
-                not math.isfinite(switch_timeout_s) or switch_timeout_s <= 0):
-            raise ValueError('switch_timeout_s must be finite and positive')
-        self.timeout = switch_timeout_s
+    def __init__(self, switch_timeout_s, settle_s, clock=time.monotonic):
+        self.timeout = _positive('switch_timeout_s', switch_timeout_s)
+        self.settle = _positive('settle_s', settle_s)
         self.clock = clock
         self.state = 'BASIC'
         self.hold = False
         self.request = None
         self.desired_gait = 1
         self.feedback = None
-        self.velocity = None
-        self._zero_after_hold = False
+        self.stopped = False
+        self._stop_confirmed = False
         self._started = None
+
+    def initialize(self, gait, in_zone):
+        """Adopt the robot's reported gait, then reconcile with current zone occupancy."""
+        self.state = 'STAIR' if gait == 14 else 'BASIC'
+        self.desired_gait = gait
+        self.event('enter' if in_zone else 'exit')
 
     def _begin(self):
         self.state = 'STOPPING'
         self.hold = True
         self.request = None
-        self._zero_after_hold = False
+        self._stop_confirmed = False
         self._started = self.clock()
 
     def event(self, event):
@@ -43,19 +54,13 @@ class GaitStateMachine:
         if ((self.state == 'BASIC' and self.desired_gait == 14) or
                 (self.state == 'STAIR' and self.desired_gait == 1)):
             self._begin()
-        # During a handshake, remember the latest occupancy without restarting
-        # its deadline. A reversed crossing must not release the wrong gait.
+        # During a handshake keep the latest occupancy without restarting the deadline.
 
-    def observe_velocity(self, x, y, yaw):
-        values = (x, y, yaw)
-        if any(isinstance(v, bool) or not isinstance(v, Real) or
-               not math.isfinite(v) for v in values):
-            self.velocity = None
-            self._zero_after_hold = False
-            return
-        self.velocity = values
-        if self.state == 'STOPPING':
-            self._zero_after_hold = all(v == 0 for v in values)
+    def observe_stopped(self, stopped):
+        self.stopped = stopped is True
+        if (self.state == 'STOPPING' and self.stopped
+                and self.clock() - self._started >= self.settle):
+            self._stop_confirmed = True
 
     def observe_gait(self, gait):
         self.feedback = gait if type(gait) is int else None
@@ -65,10 +70,9 @@ class GaitStateMachine:
             self._fault()
         elif self.feedback == self.request:
             if self.desired_gait != self.request:
-                # Complete the in-flight request before pursuing a new target.
+                # Complete the in-flight request before pursuing the newer target.
                 self.state = 'STOPPING'
                 self.request = None
-                self._zero_after_hold = False
             else:
                 self.state = 'STAIR' if self.request == 14 else 'BASIC'
                 self.hold = False
@@ -88,19 +92,17 @@ class GaitStateMachine:
             return
         if self._expired():
             self._fault()
-        elif self.state == 'STOPPING' and self._zero_after_hold:
+        elif self.state == 'STOPPING' and self._stop_confirmed:
             self.state = 'SWITCHING'
             self.request = self.desired_gait
 
     def reset(self):
-        """Explicit manual reset; a stale/missing/unsafe observation cannot clear fault."""
-        if (self.state == 'FAULT' and self.feedback == 1 and
-                self.velocity is not None and all(v == 0 for v in self.velocity)):
-            self.state = 'BASIC'
-            self.hold = False
-            self.request = None
-            self.desired_gait = 1
-            self._started = None
-            self._zero_after_hold = False
-            return True
-        return False
+        """Operator reset from FAULT: allowed only when stopped in a known gait."""
+        if self.state != 'FAULT' or not self.stopped or self.feedback not in (1, 14):
+            return False
+        self.state = 'STAIR' if self.feedback == 14 else 'BASIC'
+        self.desired_gait = self.feedback
+        self.hold = False
+        self.request = None
+        self._started = None
+        return True

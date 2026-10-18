@@ -17,40 +17,52 @@ def metrics_path(tmp_path, monkeypatch):
     return path
 
 
-def test_null_threshold_passes_and_writes_metrics_json(metrics_path, tmp_path, monkeypatch):
+@pytest.fixture
+def config(tmp_path, monkeypatch):
+    def write(text):
+        path = tmp_path / 'thresholds.yaml'
+        path.write_text(text, encoding='utf-8')
+        monkeypatch.setattr(thresholds, 'THRESHOLDS_PATH', path)
+    return write
+
+
+def test_committed_thresholds_are_unfrozen_and_report_only(metrics_path):
     workspace = Path(__file__).resolve().parents[3]
-    assert thresholds.WORKSPACE_ROOT == workspace
     assert thresholds.THRESHOLDS_PATH == workspace / 'src/hill_patrol_bringup/config/thresholds.yaml'
-    with thresholds.THRESHOLDS_PATH.open(encoding='utf-8') as stream:
-        configured = yaml.safe_load(stream)
-    assert set(configured) == {
-        'loc_pos_err_m', 'loc_yaw_err_deg', 'elev_err_m', 'patrol_laps_N',
-        'patrol_success_P', 'gait_switch_timeout_s', 'cmd_timeout_s',
-        'loc_lost_timeout_s',
-    }
-    assert all(value is None for value in configured.values())
-
-    monkeypatch.chdir(tmp_path)
-    for metric in configured:
+    configured = yaml.safe_load(thresholds.THRESHOLDS_PATH.read_text(encoding='utf-8'))
+    judged = {k for k, v in configured.items() if isinstance(v, dict)}
+    assert judged == {'loc_pos_err_m', 'loc_yaw_err_deg', 'elev_err_m', 'patrol_success_P'}
+    assert configured['patrol_success_P']['direction'] == 'min'
+    assert all(configured[k]['value'] is None for k in judged)
+    assert thresholds.parameter('patrol_laps_N') is None
+    for metric in judged:
         thresholds.report(metric, 1000.0)
-    assert metrics_path.is_file()
-    assert json.loads(metrics_path.read_text(encoding='utf-8')) == {
-        metric: 1000.0 for metric in configured
-    }
+    assert json.loads(metrics_path.read_text(encoding='utf-8')) == {m: 1000.0 for m in judged}
 
 
-def test_non_null_exceeded_threshold_fails(metrics_path, tmp_path, monkeypatch):
-    config = tmp_path / 'thresholds.yaml'
-    config.write_text('loc_pos_err_m: 1.0\n', encoding='utf-8')
-    monkeypatch.setattr(thresholds, 'THRESHOLDS_PATH', config)
-
+def test_max_direction_fails_above_threshold(metrics_path, config):
+    config('loc_pos_err_m: {value: 1.0, direction: max}\n')
     thresholds.report('loc_pos_err_m', 1.0)
-    with pytest.raises(AssertionError, match='loc_pos_err_m.*exceeds threshold'):
+    with pytest.raises(AssertionError, match='exceeds threshold'):
         thresholds.report('loc_pos_err_m', 1.1)
     assert json.loads(metrics_path.read_text(encoding='utf-8')) == {'loc_pos_err_m': 1.1}
 
 
-def test_missing_metric_key_errors(metrics_path):
+def test_min_direction_fails_below_threshold(metrics_path, config):
+    config('patrol_success_P: {value: 0.9, direction: min}\n')
+    thresholds.report('patrol_success_P', 1.0)
+    thresholds.report('patrol_success_P', 0.9)
+    with pytest.raises(AssertionError, match='below threshold'):
+        thresholds.report('patrol_success_P', 0.8)
+
+
+def test_unknown_metric_and_parameter_misuse_error(metrics_path, config):
+    config('patrol_laps_N: 3\nelev_err_m: {value: null, direction: max}\n')
     with pytest.raises(KeyError, match='unknown_metric'):
         thresholds.report('unknown_metric', 0.0)
+    with pytest.raises(KeyError, match='not a judged metric'):
+        thresholds.report('patrol_laps_N', 3)
+    with pytest.raises(KeyError, match='not a run parameter'):
+        thresholds.parameter('elev_err_m')
+    assert thresholds.parameter('patrol_laps_N') == 3
     assert not metrics_path.exists()

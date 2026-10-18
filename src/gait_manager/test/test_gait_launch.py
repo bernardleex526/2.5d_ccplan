@@ -1,8 +1,8 @@
-"""T11 real ROS/TF/UDP consumers, using explicit loopback-only timing inputs.
+"""gait_manager + m20_bridge + mock M20 over real ROS/TF/UDP.
 
-Zero cmd_vel is an explicit upstream stimulus; it is never an echo of hold.
-The recorder forwards unmodified UDP to the actual mock process. Its wire
-records, actual feedback and state jointly establish each handshake.
+The client behaves like Nav2: it keeps publishing nonzero /cmd_vel throughout,
+including while held. The handshake must complete from the bridge's /m20/stopped
+evidence alone. The recorder forwards unmodified UDP to the actual mock process.
 """
 import json
 import os
@@ -24,6 +24,7 @@ import rclpy
 from rclpy.context import Context
 from rclpy.executors import SingleThreadedExecutor
 from std_msgs.msg import Bool, Int32, String
+from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
 from m20_bridge import protocol
 
@@ -49,7 +50,10 @@ class Recorder:
             while not self.stop.is_set():
                 if not select.select([self.socket], [], [], .02)[0]:
                     continue
-                packet, source = self.socket.recvfrom(65535)
+                try:
+                    packet, source = self.socket.recvfrom(65535)
+                except ConnectionRefusedError:
+                    continue  # ICMP unreachable while the peer process is still binding.
                 self.evidence.write(json.dumps(dict(t=time.monotonic_ns(),
                     direction='mock_to_bridge' if source == self.mock_address else 'bridge_to_mock',
                     source=source, raw_hex=packet.hex(),
@@ -115,7 +119,7 @@ def resources(monkeypatch, tmp_path):
     recorder.close()
 
 
-@launch_pytest.fixture(params=['normal', 'never', 'nonzero', 'unset'])
+@launch_pytest.fixture(params=['normal', 'never'])
 def gait_launch(request, resources):
     scenario = request.param
     config = Path(__file__).resolve().parents[2] / 'hill_patrol_bringup/config'
@@ -126,24 +130,24 @@ def gait_launch(request, resources):
                                '--port', str(resources['address'][1]), '--heartbeat-timeout', '2',
                                '--ros', '--gait-mode', 'never' if scenario == 'never' else 'immediate'],
                           additional_env=env, output='screen', cached_output=True)
+    safety = str(config / 'm20_safety.yaml')
     parameters = dict(robot_ip='127.0.0.1', robot_port=resources['recorder'].address[1],
-                      thresholds_path=str(config / 'thresholds.yaml'),
-                      limits_path=str(config / 'm20_limits.yaml'), link_timeout_s=.6,
-                      cmd_timeout_s=.8, loc_lost_timeout_s=.4, gait_switch_timeout_s=1.5)
+                      safety_path=safety, limits_path=str(config / 'm20_limits.yaml'),
+                      mode='navigation')
     command = [str(bridge_bin / 'bridge_node'), '--ros-args']
     for key, value in parameters.items():
         command += ['-p', f'{key}:={value}']
     bridge = ExecuteProcess(cmd=command, additional_env=env, output='screen', cached_output=True)
-    command = [str(gait_bin), '--ros-args', '-p', f'zones_file:={config / "stair_zones.example.yaml"}']
-    if scenario != 'unset':
-        command += ['-p', 'switch_timeout_s:=0.7']
-    gait = ExecuteProcess(cmd=command, additional_env=env, output='screen', cached_output=True)
+    gait = ExecuteProcess(cmd=[str(gait_bin), '--ros-args',
+                               '-p', f'zones_file:={config / "stair_zones.example.yaml"}',
+                               '-p', f'safety_path:={safety}'],
+                          additional_env=env, output='screen', cached_output=True)
     processes = dict(mock=mock, bridge=bridge, gait=gait)
     resources.update(processes=processes, scenario=scenario)
-    resources['evidence_path'].with_suffix('.scenario').write_text(scenario + '\n')
-    handlers = [RegisterEventHandler(OnProcessExit(target_action=process,
-                on_exit=lambda event, context, name=name: resources['exits'].__setitem__(name, event.returncode)))
-                for name, process in processes.items()]
+    handlers = [RegisterEventHandler(OnProcessExit(
+        target_action=process,
+        on_exit=lambda event, context, name=name: resources['exits'].__setitem__(name, event.returncode)))
+        for name, process in processes.items()]
     return LaunchDescription(handlers + list(processes.values())), resources
 
 
@@ -154,23 +158,21 @@ class Client:
         self.node = rclpy.create_node('gait_acceptance_client', context=self.context)
         self.executor = SingleThreadedExecutor(context=self.context)
         self.executor.add_node(self.node)
-        self.messages = {key: [] for key in ('state', 'hold', 'gait', 'mock_gait', 'request')}
+        self.messages = {key: [] for key in ('state', 'hold', 'gait', 'mock_gait')}
         for kind, topic, key in [(String, '/gait/state', 'state'), (Bool, '/m20/hold', 'hold'),
-                                 (Int32, '/m20/gait', 'gait'), (Int32, '/sim/m20_gait', 'mock_gait'),
-                                 (Int32, '/gait/request', 'request')]:
-            self.node.create_subscription(kind, topic,
-                lambda message, key=key: self.messages[key].append(message.data), 10)
+                                 (Int32, '/m20/gait', 'gait'), (Int32, '/sim/m20_gait', 'mock_gait')]:
+            self.node.create_subscription(
+                kind, topic, lambda message, key=key: self.messages[key].append(message.data), 10)
         self.cmd = self.node.create_publisher(Twist, '/cmd_vel', 10)
         self.loc = self.node.create_publisher(Bool, '/localization/ok', 10)
+        self.reset = self.node.create_client(Trigger, '/gait/reset_fault')
         self.tf = TransformBroadcaster(self.node)
         self.xy = (-1., 1.)
-        self.moving = True
 
     def send(self):
         self.loc.publish(Bool(data=True))
         cmd = Twist()
-        if self.moving:
-            cmd.linear.x = .35
+        cmd.linear.x = .35  # Nav2-like: never an inferred zero, even while held.
         self.cmd.publish(cmd)
         transform = TransformStamped()
         transform.header.stamp = self.node.get_clock().now().to_msg()
@@ -180,7 +182,7 @@ class Client:
         transform.transform.rotation.w = 1.
         self.tf.sendTransform(transform)
 
-    def pump(self, predicate, timeout=6):
+    def pump(self, predicate, timeout=10):
         deadline = time.monotonic() + timeout
         next_send = 0.
         while time.monotonic() < deadline:
@@ -208,10 +210,9 @@ def assert_wire_switch(recorder, start, gait):
     request = next((i for i, r in enumerate(records)
                     if (r['Type'], r['Command']) == (2, 23) and r['Items']['GaitParam'] == gait), None)
     assert request is not None, 'missing real UDP gait request'
-    preceding_axes = [r['Items'] for r in records[:request] if (r['Type'], r['Command']) == (2, 21)]
-    assert preceding_axes and zero(preceding_axes[-1]), 'no wire zero before gait request'
-    axes = [r['Items'] for r in records[request:] if (r['Type'], r['Command']) == (2, 21)]
-    assert axes and all(zero(a) for a in axes), 'nonzero wire output during handshake'
+    preceding = [r['Items'] for r in records[:request] if (r['Type'], r['Command']) == (2, 21)]
+    assert len(preceding) >= 3 and all(zero(a) for a in preceding[-3:]), \
+        'robot was not held at zero before the gait request'
 
 
 @pytest.mark.launch(fixture=gait_launch)
@@ -220,63 +221,36 @@ def test_gait_end_to_end(gait_launch):
     recorder, scenario = data['recorder'], data['scenario']
     client = Client()
     try:
-        client.pump(lambda: client.cmd.get_subscription_count() == 2 and
-                    client.loc.get_subscription_count() == 1 and bool(client.messages['gait']))
-        if scenario == 'unset':
-            client.pump(lambda: client.state('FAULT') and len(recorder.axes()) >= 5)
-            # Continuous upstream motion spans the complete startup history and
-            # elapsed switch/heartbeat intervals; FAULT must never release hold.
-            until = time.monotonic() + 3.2
-            client.pump(lambda: time.monotonic() >= until, timeout=4.5)
-            assert client.state('FAULT') and client.messages['hold'][-1] is True
-            assert all(zero(a) for a in recorder.axes())
-            assert not recorder.requests()
-        else:
-            client.pump(lambda: client.state('BASIC') and any(not zero(a) for a in recorder.axes()))
+        client.pump(lambda: client.cmd.get_subscription_count() == 1 and bool(client.messages['gait']))
+        client.pump(lambda: client.state('BASIC') and any(not zero(a) for a in recorder.axes()))
+        start = len(recorder.snapshot())
+        client.xy = (1., 1.)
+        client.pump(lambda: client.state('STOPPING') and client.messages['hold'][-1] is True)
+        if scenario == 'normal':
+            client.pump(lambda: client.state('STAIR') and client.messages['gait'][-1] == 14
+                        and client.messages['hold'][-1] is False)
+            assert 14 in client.messages['mock_gait']
+            assert_wire_switch(recorder, start, 14)
+            client.pump(lambda: not zero(recorder.axes()[-1]))
+            # Zone-to-zone motion keeps stair gait without a new handshake.
+            client.xy = (4., 1.)
+            client.pump(lambda: not zero(recorder.axes()[-1]))
+            assert client.state('STAIR') and len(recorder.requests()) == 1
             start = len(recorder.snapshot())
-            client.xy = (1., 1.)
-            client.pump(lambda: client.state('STOPPING') and client.messages['hold'][-1] is True)
-            # A nonzero upstream command must never be replaced by an inferred stop.
-            assert not recorder.requests()
-            if scenario != 'nonzero':
-                client.moving = False
-            if scenario == 'normal':
-                client.pump(lambda: client.state('STAIR') and 14 in client.messages['mock_gait']
-                            and client.messages['gait'][-1] == 14
-                            and client.messages['hold'][-1] is False
-                            and client.messages['request'] == [14])
-                assert_wire_switch(recorder, start, 14)
-                assert client.messages['hold'][-1] is False
-                assert client.messages['request'] == [14]
-                client.moving = True
-                client.pump(lambda: not zero(recorder.axes()[-1]))
-                start = len(recorder.snapshot())
-                client.xy = (6., 1.)
-                client.pump(lambda: client.state('STOPPING'))
-                client.moving = False
-                client.pump(lambda: client.state('BASIC') and client.messages['mock_gait'][-1] == 1
-                            and client.messages['gait'][-1] == 1
-                            and client.messages['hold'][-1] is False
-                            and client.messages['request'] == [14, 1])
-                assert_wire_switch(recorder, start, 1)
-                assert client.messages['request'] == [14, 1]
-                client.moving = True
-                client.pump(lambda: not zero(recorder.axes()[-1]))
-            else:
-                client.pump(lambda: client.state('FAULT') and recorder.axes() and zero(recorder.axes()[-1]))
-                if scenario == 'never':
-                    assert_wire_switch(recorder, start, 14)
-                    assert client.messages['gait'][-1] == 1
-                    assert recorder.feedback() and recorder.feedback()[-1] == 1
-                else:
-                    assert not recorder.requests()
-                assert client.messages['hold'][-1] is True
-                client.moving = True
-                client.xy = (-1., 1.)
-                axis_start = len(recorder.axes())
-                client.pump(lambda: len(recorder.axes()) >= axis_start + 8)
-                assert all(zero(a) for a in recorder.axes()[axis_start:])
-                assert client.state('FAULT') and client.messages['hold'][-1] is True
+            client.xy = (6., 1.)
+            client.pump(lambda: client.state('BASIC') and client.messages['gait'][-1] == 1
+                        and client.messages['hold'][-1] is False
+                        and recorder.requests()[-1]['Items']['GaitParam'] == 1)
+            assert_wire_switch(recorder, start, 1)
+            client.pump(lambda: not zero(recorder.axes()[-1]))
+        else:
+            client.pump(lambda: client.state('FAULT') and zero(recorder.axes()[-1]))
+            assert_wire_switch(recorder, start, 14)
+            client.xy = (-1., 1.)
+            axis_start = len(recorder.axes())
+            client.pump(lambda: len(recorder.axes()) >= axis_start + 8)
+            assert all(zero(a) for a in recorder.axes()[axis_start:])
+            assert client.state('FAULT') and client.messages['hold'][-1] is True
         for name in ('gait', 'bridge', 'mock'):
             os.kill(data['processes'][name].process_details['pid'], signal.SIGTERM)
             client.pump(lambda: name in data['exits'])

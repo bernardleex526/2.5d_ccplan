@@ -1,0 +1,8 @@
+# m20_bridge / gait_manager 安全时序（秒）。
+# 仿真占位：实验设计值（AI 提议），仅用于 Gazebo + mock；第二阶段入口清单 P7 实测替换，
+# 第 2 检查点可由用户改写。实机 CP3 前必须由用户确认，否则不得上实机。
+cmd_timeout_s: 0.5          # 超过该时间无 /cmd_vel → 输出零速度（可自动恢复，不锁死）
+loc_lost_timeout_s: 1.0     # /localization/ok 持续 false 超过该时间 → 锁死故障
+link_timeout_s: 1.0         # 超过该时间无 M20 状态回报 → 锁死故障
+gait_switch_timeout_s: 5.0  # 步态切换请求后超过该时间未确认 → 锁死故障
+stopped_settle_s: 0.3       # 连续输出零速度达到该时间才发布 /m20/stopped=true

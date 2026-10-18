@@ -1,8 +1,8 @@
-loc_pos_err_m: null  # 待确认（第 2 检查点冻结）
-loc_yaw_err_deg: null  # 待确认（第 2 检查点冻结）
-elev_err_m: null  # 待确认（第 2 检查点冻结）
-patrol_laps_N: null  # 待确认（第 2 检查点冻结）
-patrol_success_P: null  # 待确认（第 2 检查点冻结）
-gait_switch_timeout_s: null  # 待确认（第 2 检查点冻结）
-cmd_timeout_s: null  # 待确认（第 2 检查点冻结）
-loc_lost_timeout_s: null  # 待确认（第 2 检查点冻结）
+# 验收指标阈值（第 2 检查点由用户冻结）。null = 只报告、不判定。
+# direction: max = 实测值不得大于阈值；min = 实测值不得小于阈值。
+loc_pos_err_m: {value: null, direction: max}      # 待确认（第 2 检查点冻结）
+loc_yaw_err_deg: {value: null, direction: max}    # 待确认（第 2 检查点冻结）
+elev_err_m: {value: null, direction: max}         # 待确认（第 2 检查点冻结）
+patrol_success_P: {value: null, direction: min}   # 待确认（第 2 检查点冻结）
+# 巡逻圈数 N 是运行参数而非判定指标，由 patrol_manager 读取。
+patrol_laps_N: null                               # 待确认（第 2 检查点冻结）

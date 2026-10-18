@@ -1,4 +1,4 @@
-"""Read configured thresholds and record test metrics before judging them."""
+"""Read configured acceptance thresholds and record test metrics before judging them."""
 
 import json
 from pathlib import Path
@@ -19,26 +19,42 @@ THRESHOLDS_PATH = WORKSPACE_ROOT / 'src/hill_patrol_bringup/config/thresholds.ya
 METRICS_PATH = WORKSPACE_ROOT / 'reports/metrics.json'
 
 
+def _load():
+    with THRESHOLDS_PATH.open(encoding='utf-8') as stream:
+        return yaml.safe_load(stream)
+
+
+def parameter(name):
+    """Return a frozen run parameter (e.g. patrol_laps_N); None while unfrozen."""
+    value = _load()[name]
+    if isinstance(value, dict):
+        raise KeyError(f'{name} is a judged metric, not a run parameter')
+    return value
+
+
 def report(metric, value):
-    """Record a metric; a configured non-null threshold is an upper bound.
+    """Record a metric, then judge it against its non-null threshold.
 
     Unknown metric names raise KeyError. Null thresholds only record the value.
-    The report retains the most recently reported value of each metric, including
-    a value that fails its threshold assertion.
+    direction max requires value <= threshold; min requires value >= threshold.
+    The report retains the most recently reported value, including a failing one.
     """
-    with THRESHOLDS_PATH.open(encoding='utf-8') as stream:
-        thresholds = yaml.safe_load(stream)
-    threshold = thresholds[metric]
+    entry = _load()[metric]
+    if not isinstance(entry, dict) or entry.get('direction') not in ('max', 'min'):
+        raise KeyError(f'{metric} is not a judged metric with direction max/min')
 
     metrics = {}
     if METRICS_PATH.is_file():
-        with METRICS_PATH.open(encoding='utf-8') as stream:
-            metrics = json.load(stream)
+        metrics = json.loads(METRICS_PATH.read_text(encoding='utf-8'))
     metrics[metric] = value
     METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with METRICS_PATH.open('w', encoding='utf-8') as stream:
-        json.dump(metrics, stream, ensure_ascii=False, indent=2)
-        stream.write('\n')
+    METRICS_PATH.write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + '\n',
+                            encoding='utf-8')
 
-    if threshold is not None:
+    threshold = entry['value']
+    if threshold is None:
+        return
+    if entry['direction'] == 'max':
         assert value <= threshold, f'{metric}: {value} exceeds threshold {threshold}'
+    else:
+        assert value >= threshold, f'{metric}: {value} is below threshold {threshold}'

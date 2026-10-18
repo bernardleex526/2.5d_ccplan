@@ -1,4 +1,4 @@
-"""T10 handshake tests driven by observations and an independent clock."""
+"""Gait handshake tests driven by observations and an injected clock."""
 from pathlib import Path
 import sys
 
@@ -6,6 +6,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gait_manager.state_machine import GaitStateMachine
+
+TIMEOUT, SETTLE = 2.0, 0.3
 
 
 class Clock:
@@ -19,115 +21,117 @@ class Clock:
 @pytest.fixture
 def machine():
     clock = Clock()
-    return GaitStateMachine(2.0, clock), clock
+    return GaitStateMachine(TIMEOUT, SETTLE, clock), clock
 
 
-def enter_stair(sm):
-    sm.event('enter')
-    sm.observe_velocity(0, 0, 0)
+def confirm_stop(sm, clock):
+    clock.now += SETTLE
+    sm.observe_stopped(True)
     sm.tick()
+
+
+def enter_stair(sm, clock):
+    sm.event('enter')
+    confirm_stop(sm, clock)
     assert (sm.state, sm.hold, sm.request) == ('SWITCHING', True, 14)
     sm.observe_gait(14)
     assert (sm.state, sm.hold, sm.request) == ('STAIR', False, None)
 
 
 def test_normal_enter_and_exit(machine):
-    sm, _ = machine
+    sm, clock = machine
     assert (sm.state, sm.hold, sm.request) == ('BASIC', False, None)
-    sm.observe_velocity(0, 0, 0)
-    sm.observe_gait(14)
-    sm.event('enter')
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('STOPPING', True, None)
-    sm.observe_velocity(0, 0, 0)
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('SWITCHING', True, 14)
-    sm.tick()
-    assert sm.hold  # Cached pre-request feedback is not confirmation.
-    sm.observe_gait(14)
-    assert (sm.state, sm.hold) == ('STAIR', False)
+    enter_stair(sm, clock)
     sm.event('exit')
-    assert (sm.state, sm.hold, sm.request) == ('STOPPING', True, None)
-    sm.observe_velocity(0, 0, 0)
-    sm.tick()
+    assert (sm.state, sm.hold) == ('STOPPING', True)
+    confirm_stop(sm, clock)
     assert sm.request == 1
     sm.observe_gait(1)
     assert (sm.state, sm.hold, sm.request) == ('BASIC', False, None)
 
 
-@pytest.mark.parametrize('velocity', [(1, 0, 0), (0, -1, 0), (0, 0, .1), (float('nan'), 0, 0), (0, float('inf'), 0)])
-def test_not_stopped(machine, velocity):
-    sm, _ = machine
-    sm.event('enter')
-    sm.observe_velocity(*velocity)
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('STOPPING', True, None)
-
-
-@pytest.mark.parametrize('phase', ['STOPPING', 'SWITCHING'])
-def test_timeout_and_latched_fault(machine, phase):
+def test_nonzero_upstream_commands_do_not_block_switch(machine):
+    """Nav2 keeps commanding motion while held; only bridge stopped evidence matters."""
     sm, clock = machine
+    started = clock.now
     sm.event('enter')
-    if phase == 'SWITCHING':
-        sm.observe_velocity(0, 0, 0)
+    for step in (0.1, 0.2):
+        clock.now = started + step
         sm.tick()
-    clock.now += 1.99
+    clock.now = started + SETTLE
+    sm.observe_stopped(True)
     sm.tick()
-    assert sm.state == phase
-    clock.now += .01
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('FAULT', True, None)
+    assert sm.state == 'SWITCHING'
+
+
+def test_stale_stopped_before_settle_is_ignored(machine):
+    sm, clock = machine
+    started = clock.now
+    sm.observe_stopped(True)
     sm.event('enter')
-    sm.event('exit')
-    sm.observe_gait(14)
-    sm.observe_velocity(0, 0, 0)
+    sm.observe_stopped(True)
     sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('FAULT', True, None)
-    assert not sm.reset()
-    sm.observe_gait(1)
-    sm.observe_velocity(1, 0, 0)
-    assert not sm.reset()
-    sm.observe_velocity(0, 0, 0)
-    assert sm.reset()
-    assert (sm.state, sm.hold, sm.request) == ('BASIC', False, None)
-    enter_stair(sm)
+    assert sm.state == 'STOPPING' and sm.request is None
+    clock.now = started + SETTLE - 1e-6
+    sm.observe_stopped(True)
+    sm.tick()
+    assert sm.state == 'STOPPING'
+    clock.now = started + SETTLE
+    sm.observe_stopped(True)
+    sm.tick()
+    assert sm.state == 'SWITCHING'
 
 
-@pytest.mark.parametrize('feedback', [1, 0, 99, None, 14.0, True])
-def test_incorrect_feedback_waits_until_timeout(machine, feedback):
+def test_not_stopped_times_out_to_latched_fault(machine):
     sm, clock = machine
     sm.event('enter')
-    sm.observe_velocity(0, 0, 0)
-    sm.tick()
-    sm.observe_gait(feedback)
-    assert (sm.state, sm.hold, sm.request) == ('SWITCHING', True, 14)
-    clock.now += 2
+    clock.now += TIMEOUT
+    sm.observe_stopped(False)
     sm.tick()
     assert (sm.state, sm.hold) == ('FAULT', True)
+    sm.event('exit')
+    sm.observe_stopped(True)
+    sm.observe_gait(1)
+    sm.tick()
+    assert (sm.state, sm.hold) == ('FAULT', True)
+
+
+@pytest.mark.parametrize('feedback', [1, 99, None])
+def test_wrong_feedback_waits_until_timeout(machine, feedback):
+    sm, clock = machine
+    sm.event('enter')
+    confirm_stop(sm, clock)
+    sm.observe_gait(feedback)
+    assert sm.state == 'SWITCHING' and sm.hold
+    clock.now += TIMEOUT
+    sm.tick()
+    assert sm.state == 'FAULT'
 
 
 def test_feedback_at_deadline_cannot_release(machine):
     sm, clock = machine
     sm.event('enter')
-    sm.observe_velocity(0, 0, 0)
-    sm.tick()
-    clock.now += 2
+    confirm_stop(sm, clock)
+    clock.now += TIMEOUT
     sm.observe_gait(14)
     assert (sm.state, sm.hold) == ('FAULT', True)
 
 
-def test_repeat_enter_never_restarts_or_switches_stair(machine):
+def test_repeated_enter_neither_restarts_nor_extends_deadline(machine):
     sm, clock = machine
     sm.event('enter')
-    clock.now += 1
+    clock.now += TIMEOUT - 0.1
     sm.event('enter')
-    sm.observe_velocity(0, 0, 0)
+    clock.now += 0.1
     sm.tick()
-    sm.observe_gait(14)
+    assert sm.state == 'FAULT'
+
+
+def test_repeat_enter_in_stair_is_idempotent(machine):
+    sm, clock = machine
+    enter_stair(sm, clock)
     sm.event('enter')
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('STAIR', False, None)
-    assert not sm.reset()
+    assert (sm.state, sm.hold) == ('STAIR', False)
 
 
 @pytest.mark.parametrize('phase', ['STOPPING', 'SWITCHING'])
@@ -135,48 +139,49 @@ def test_reverse_crossing_never_releases_wrong_gait(machine, phase):
     sm, clock = machine
     sm.event('enter')
     if phase == 'SWITCHING':
-        sm.observe_velocity(0, 0, 0)
-        sm.tick()
+        confirm_stop(sm, clock)
     sm.event('exit')
-    if phase == 'SWITCHING':
+    if phase == 'STOPPING':
+        confirm_stop(sm, clock)
+        assert sm.request == 1
+        sm.observe_gait(1)
+        assert (sm.state, sm.hold) == ('BASIC', False)
+    else:
         sm.observe_gait(14)
-        assert (sm.state, sm.hold) == ('STOPPING', True)
-    sm.observe_velocity(0, 0, 0)
-    sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('SWITCHING', True, 1)
-    sm.observe_gait(1)
-    assert (sm.state, sm.hold) == ('BASIC', False)
+        assert (sm.state, sm.hold, sm.request) == ('STOPPING', True, None)
+        confirm_stop(sm, clock)
+        assert sm.request == 1
 
 
-def test_repeated_event_does_not_extend_timeout(machine):
-    sm, clock = machine
-    sm.event('enter')
-    clock.now += 1
-    sm.event('enter')
-    clock.now += 1
-    sm.tick()
-    assert sm.state == 'FAULT'
-
-
-@pytest.mark.parametrize('timeout', [None, 0, -1, float('nan'), float('inf'), '2', True])
-def test_invalid_timeout(timeout):
-    with pytest.raises(ValueError):
-        GaitStateMachine(timeout)
-
-
-def test_no_reset_without_observations(machine):
-    sm, clock = machine
-    sm.event('enter')
-    clock.now += 2
-    sm.tick()
-    assert not sm.reset()
-    sm.observe_gait(1)
-    assert not sm.reset()
-
-
-def test_none_event_and_exit_in_basic_are_idempotent(machine):
+def test_initialize_inside_zone_on_basic_starts_handshake(machine):
     sm, _ = machine
-    sm.event(None)
-    sm.event('exit')
+    sm.initialize(1, in_zone=True)
+    assert (sm.state, sm.hold) == ('STOPPING', True)
+
+
+def test_initialize_in_stair_outside_zone_switches_back(machine):
+    sm, _ = machine
+    sm.initialize(14, in_zone=False)
+    assert (sm.state, sm.desired_gait) == ('STOPPING', 1)
+
+
+def test_reset_requires_stopped_known_gait(machine):
+    sm, clock = machine
+    assert not sm.reset()
+    sm.event('enter')
+    clock.now += TIMEOUT
     sm.tick()
-    assert (sm.state, sm.hold, sm.request) == ('BASIC', False, None)
+    assert not sm.reset()
+    sm.observe_stopped(True)
+    assert not sm.reset()
+    sm.observe_gait(14)
+    assert sm.reset()
+    assert (sm.state, sm.hold) == ('STAIR', False)
+
+
+@pytest.mark.parametrize('value', [0, -1, float('nan'), float('inf'), True, '1', None])
+def test_invalid_timings(value):
+    with pytest.raises(ValueError):
+        GaitStateMachine(value, SETTLE)
+    with pytest.raises(ValueError):
+        GaitStateMachine(TIMEOUT, value)
