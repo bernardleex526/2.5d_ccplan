@@ -1,7 +1,9 @@
 """ROS gait manager for map-frame stair zones; review before hardware use.
 
 Parameters: zones_file, safety_path (m20_safety.yaml: gait_switch_timeout_s and
-stopped_settle_s). Hold stays asserted until TF and real gait feedback exist and
+stopped_settle_s), exit_margin_m (width of the flat platform band inside each zone
+edge; the switch back to Basic starts on leaving the tread core so the robot is
+already in Basic when it leaves the zone; 0 = switch at the zone boundary). Hold stays asserted until TF and real gait feedback exist and
 the bridge is subscribed. Stopped evidence is the bridge's /m20/stopped.
 While /gait/state is STOPPING or SWITCHING the robot is held; the patrol manager
 should pause its Nav2 goal so progress checking cannot abort it. FAULT keeps hold
@@ -30,6 +32,7 @@ class GaitNode(Node):
         descriptor = ParameterDescriptor(read_only=True, dynamic_typing=True)
         zones_file = self.declare_parameter('zones_file', '', descriptor).value
         safety_path = self.declare_parameter('safety_path', '', descriptor).value
+        self.exit_margin = float(self.declare_parameter('exit_margin_m', 0.0, descriptor).value)
         self.zones = Zones.load(zones_file)
         with open(safety_path, encoding='utf-8') as stream:
             safety = yaml.safe_load(stream)
@@ -78,7 +81,7 @@ class GaitNode(Node):
             sm.initialize(sm.feedback, self.zones.zone_at(*xy) is not None)
             self._initialized = True
         else:
-            sm.event(self.zones.transition(self._previous, xy))
+            sm.event(self.zones.transition(self._previous, xy, self.exit_margin))
         self._previous = xy
         sm.tick()
         self._publish(sm.hold, sm.state, sm.request)

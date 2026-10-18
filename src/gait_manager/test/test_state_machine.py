@@ -185,3 +185,16 @@ def test_invalid_timings(value):
         GaitStateMachine(value, SETTLE)
     with pytest.raises(ValueError):
         GaitStateMachine(TIMEOUT, value)
+
+
+def test_repeated_exit_during_or_after_switch_back_is_ignored(machine):
+    sm, clock = machine
+    enter_stair(sm, clock)
+    sm.event('exit')
+    sm.event('exit')  # outer boundary crossed while still stopping
+    assert sm.state == 'STOPPING' and sm.desired_gait == 1
+    confirm_stop(sm, clock)
+    sm.observe_gait(1)
+    assert (sm.state, sm.hold) == ('BASIC', False)
+    sm.event('exit')
+    assert (sm.state, sm.hold) == ('BASIC', False)

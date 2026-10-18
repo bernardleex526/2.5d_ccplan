@@ -89,6 +89,20 @@ class Zone:
                     inside = not inside
         return inside
 
+    def edge_distance(self, point):
+        """Distance from point to the nearest polygon edge (inside or outside)."""
+        px, py = point
+        best = math.inf
+        for (ax, ay), (bx, by) in zip(self.polygon, self.polygon[1:]):
+            dx, dy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+            best = min(best, math.hypot(px - ax - t * dx, py - ay - t * dy))
+        return best
+
+    def distance_to(self, point):
+        """0 inside or on the boundary, else the distance to the nearest edge."""
+        return 0.0 if self.contains(point) else self.edge_distance(point)
+
 
 class Zones:
     """Validated YAML data; ``zone_at`` returns a Zone or None."""
@@ -124,11 +138,37 @@ class Zones:
         point = _point((x, y))
         return next((zone for zone in self.zones if zone.contains(point)), None)
 
-    def transition(self, prev_xy, cur_xy):
-        previous = self.zone_at(*_point(prev_xy)) is not None
-        current = self.zone_at(*_point(cur_xy)) is not None
-        if current and not previous:
+    def transition(self, prev_xy, cur_xy, exit_margin=0.0):
+        """'enter' on crossing into a zone; 'exit' on leaving its tread core.
+
+        exit_margin > 0: the zone's outer band of that width is flat platform
+        (generator stair_zone_margin), so the handshake back to Basic starts when
+        the robot leaves the core (zone shrunk by exit_margin) heading out, and the
+        robot is already stopped and switched before it crosses the outer boundary.
+        """
+        prev_xy, cur_xy = _point(prev_xy), _point(cur_xy)
+        if exit_margin <= 0:
+            previous = self.zone_at(*prev_xy) is not None
+            current = self.zone_at(*cur_xy) is not None
+            if current and not previous:
+                return 'enter'
+            if previous and not current:
+                return 'exit'
+            return None
+        was_inside, is_inside = self.zone_at(*prev_xy) is not None, self.zone_at(*cur_xy) is not None
+        if is_inside and not was_inside:
             return 'enter'
-        if previous and not current:
+        if was_inside and not is_inside:
+            return 'exit'  # left without reaching the core (e.g. backed out of the band)
+        if self._in_core(prev_xy, exit_margin) and not self._in_core(cur_xy, exit_margin):
             return 'exit'
         return None
+
+    def _in_core(self, point, margin):
+        zone = self.zone_at(*point)
+        return zone is not None and zone.edge_distance(point) >= margin
+
+    def distance(self, x, y):
+        """Distance from (x, y) to the nearest zone (0 inside or on a boundary)."""
+        point = _point((x, y))
+        return min((zone.distance_to(point) for zone in self.zones), default=math.inf)
