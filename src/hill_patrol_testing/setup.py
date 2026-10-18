@@ -17,4 +17,7 @@ setup(
     description='Threshold reading and metric reporting for hill patrol tests.',
     license='Apache-2.0',
     tests_require=['pytest'],
+    entry_points={'console_scripts': [
+        'global_elevation_builder = hill_patrol_testing.global_elevation_builder:main',
+    ]},
 )
