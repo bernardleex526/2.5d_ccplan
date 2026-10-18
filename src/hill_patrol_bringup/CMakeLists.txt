@@ -5,7 +5,7 @@ find_package(ament_cmake REQUIRED)
 
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/drive_route.py scripts/record_trajectories.py
-        scripts/localization_monitor.py
+        scripts/localization_monitor.py scripts/send_goal.py
         DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

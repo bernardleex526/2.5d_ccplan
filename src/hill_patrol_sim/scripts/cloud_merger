@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+from hill_patrol_sim.cloud_merger import main
+
+main()

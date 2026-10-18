@@ -105,3 +105,12 @@ def test_fill_holes_grows_known_area_by_one_cell_per_iteration():
     assert np.isfinite(once).sum() == 9 and np.allclose(once[1:4, 1:4], 3.0)
     assert np.isfinite(builder.fill_holes(grid, 2)).all()
     assert np.isnan(builder.fill_holes(np.full((2, 2), np.nan), 3)).all()
+
+
+def test_remove_spikes_keeps_steps_and_drops_isolated_cells():
+    grid = np.zeros((9, 9), dtype=np.float32)
+    grid[:, 5:] = 0.15          # a real step edge: neighbours share the height
+    grid[2, 2] = 2.0            # isolated spike
+    out = builder.remove_spikes(grid, 0.3)
+    assert np.isnan(out[2, 2])
+    assert np.allclose(out[:, 5:], 0.15) and np.isfinite(out).sum() == 80

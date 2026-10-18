@@ -1,0 +1,15 @@
+Upstream v2.0.0 (e311bfd): the C++ wrapper calls ElevationMap.get_position(), but
+the Python module only defines get_center_position() with the same signature, so
+elevation_mapping_node aborts on its first map publication. Applied at build time
+by scripts/setup_env.sh; the submodule itself stays at the pinned commit.
+--- a/elevation_mapping_cupy/src/elevation_mapping_wrapper.cpp
++++ b/elevation_mapping_cupy/src/elevation_mapping_wrapper.cpp
+@@ -260,7 +260,7 @@
+ 
+   RowMatrixXd pos(1, 3);
+   py::gil_scoped_acquire acquire;
+-  map_.attr("get_position")(Eigen::Ref<RowMatrixXd>(pos));
++  map_.attr("get_center_position")(Eigen::Ref<RowMatrixXd>(pos));
+   grid_map::Position position(pos(0, 0), pos(0, 1));
+   grid_map::Length length(map_length_, map_length_);
+   gridMap.setGeometry(length, resolution_, position);

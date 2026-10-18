@@ -9,10 +9,12 @@ resolution, png height scale/offset). Points are binned into resolution-sized
 cells; each cell stores the chosen statistic of its point heights. Cells are
 2.5D: overhanging returns (tree canopies) are removed by keeping only points
 within `max_band` of the cell's lowest point before taking the statistic.
-Resolution defaults to elevation_mapping_cupy's 0.1 m (plan D18 / T21).
+Isolated spikes (cells far above their neighbourhood median) are removed before
+hole filling. Resolution defaults to elevation_mapping_cupy's 0.1 m (plan D18 / T21).
 """
 import argparse
 import math
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +46,24 @@ def build(points, resolution, *, statistic='median', max_band=0.5):
         grid[flat[start]] = reducer(cell)
     origin = (float(lo[0] + resolution / 2), float(lo[1] + resolution / 2))
     return grid.reshape(rows, cols), origin
+
+
+def remove_spikes(grid, spike_m, window=5):
+    """Mark cells that rise more than spike_m above their window's median as unknown.
+
+    Isolated high cells come from sparse returns (dust, the robot's own body near
+    the scan origin); a cell on a real step has neighbours at its height.
+    """
+    pad = window // 2
+    padded = np.pad(grid, pad, constant_values=np.nan)
+    stack = np.stack([padded[dy:dy + grid.shape[0], dx:dx + grid.shape[1]]
+                      for dy in range(window) for dx in range(window)])
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)  # all-NaN windows
+        median = np.nanmedian(stack, axis=0)
+    out = grid.copy()
+    out[np.isfinite(grid) & (grid - median > spike_m)] = np.nan
+    return out
 
 
 def fill_holes(grid, iterations):
@@ -101,6 +121,8 @@ def main():
     parser.add_argument('--resolution', type=float, default=0.1)
     parser.add_argument('--statistic', choices=['median', 'mean', 'min', 'max'], default='median')
     parser.add_argument('--max-band', type=float, default=0.5)
+    parser.add_argument('--spike', type=float, default=0.3,
+                        help='remove cells this far above their 5x5 neighbourhood median (m)')
     parser.add_argument('--fill', type=int, default=2,
                         help='hole-filling iterations (each grows known area by one cell)')
     parser.add_argument('--map-to-world', default=None,
@@ -110,7 +132,7 @@ def main():
     if args.map_to_world:
         points = transform(points, *map(float, args.map_to_world.split()))
     grid, origin = build(points, args.resolution, statistic=args.statistic, max_band=args.max_band)
-    grid = fill_holes(grid, args.fill)
+    grid = fill_holes(remove_spikes(grid, args.spike), args.fill)
     meta = save(grid, origin, args.resolution, args.out_dir)
     print(f"elevation {meta['rows']}x{meta['cols']} @ {args.resolution} m, "
           f"{int(np.isfinite(grid).sum())} known cells -> {args.out_dir}")

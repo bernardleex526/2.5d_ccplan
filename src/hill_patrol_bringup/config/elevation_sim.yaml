@@ -1,0 +1,31 @@
+# T21 elevation_mapping_cupy overlay on the upstream core_param.yaml (pinned SHA in .gitmodules).
+# Resolution 0.1 m and map_length 20 m are the upstream defaults (plan D18).
+elevation_mapping_node:
+  ros__parameters:
+    map_frame: 'map'                 # Lightning-LM localization frame (T23)
+    base_frame: 'base_link'
+    corrected_map_frame: 'map'
+    initialize_frame_id: ['base_link']
+    initialize_tf_offset: [-0.285]   # base_link is the body-box centre; feet are 0.285 m below
+    max_height_range: 2.0            # reject canopy returns more than 2 m above the sensor
+    use_chainer: false               # torch traversability filter (upstream default)
+    weight_file: '$(find-pkg-share elevation_mapping_cupy)/config/core/weights.dat'
+    plugin_config_file: '$(find-pkg-share hill_patrol_bringup)/config/elevation_plugins.yaml'
+    enable_drift_compensation: false # Lightning-LM localization already corrects drift
+    pointcloud_channel_fusions:
+      default: 'average'
+    image_channel_fusions:
+      default: 'exponential'
+    subscribers:                     # single input: upstream aborts on a second pointcloud subscriber
+      merged:
+        topic_name: '/elevation/points'  # cloud_merger: lidar + D435i in base_link
+        data_type: pointcloud
+    publishers:
+      elevation_map_raw:
+        layers: ['elevation', 'traversability', 'variance']
+        basic_layers: ['elevation']
+        fps: 5.0
+      elevation_map_filter:
+        layers: ['min_filter', 'smooth', 'inpaint', 'elevation']
+        basic_layers: ['min_filter']
+        fps: 3.0
