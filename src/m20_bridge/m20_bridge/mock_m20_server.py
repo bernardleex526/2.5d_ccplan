@@ -26,6 +26,7 @@ import math
 import select
 import signal
 import socket
+import sys
 import threading
 import time
 
@@ -227,7 +228,10 @@ def main(args=None):
     parser.add_argument('--gait-mode', choices=('immediate', 'delayed', 'never'), default='immediate')
     parser.add_argument('--gait-delay', type=float, metavar='SECONDS', help='required only for delayed mode')
     parser.add_argument('--ros', action='store_true', help='publish normalized Twist and applied Int32 gait')
-    options = parser.parse_args(args)
+    argv = sys.argv[1:] if args is None else list(args)
+    if '--ros-args' in argv:  # launch_ros Node appends ROS arguments; they are not ours.
+        argv = argv[:argv.index('--ros-args')]
+    options = parser.parse_args(argv)
     # Validate and bind before allocating optional ROS resources.
     try:
         server = MockM20Server(heartbeat_timeout=options.heartbeat_timeout,

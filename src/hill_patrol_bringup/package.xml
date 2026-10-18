@@ -2,10 +2,20 @@
 <package format="3">
   <name>hill_patrol_bringup</name>
   <version>0.0.0</version>
-  <description>Configuration for the hill patrol navigation system.</description>
+  <description>Launch files and configuration for the hill patrol navigation system.</description>
   <maintainer email="bernardx526@163.com">bernardx526</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>hill_patrol_sim</exec_depend>
+  <exec_depend>m20_bridge</exec_depend>
+  <exec_depend>gait_manager</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>launch_pytest</test_depend>
   <export>
     <build_type>ament_cmake</build_type>
   </export>

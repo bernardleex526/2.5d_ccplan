@@ -6,7 +6,6 @@
   <maintainer email="bernardx526@163.com">bernardx526</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_python</buildtool_depend>
-  <exec_depend>hill_patrol_bringup</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <test_depend>python3-pytest</test_depend>
   <export>

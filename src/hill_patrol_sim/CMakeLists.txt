@@ -30,6 +30,7 @@ endforeach()
 add_custom_target(worlds ALL DEPENDS ${WORLD_OUTPUTS})
 
 ament_python_install_package(${PROJECT_NAME})
+install(PROGRAMS scripts/cloud_adapter DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config models DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY ${WORLD_DIR} DESTINATION share/${PROJECT_NAME})
 ament_package()

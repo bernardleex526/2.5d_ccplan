@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+from hill_patrol_sim.cloud_adapter import main
+
+main()

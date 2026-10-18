@@ -11,6 +11,9 @@
   <depend>yaml-cpp</depend>
   <buildtool_depend>python3-yaml</buildtool_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <test_depend>ament_index_python</test_depend>
   <test_depend>launch_pytest</test_depend>
   <test_depend>rclpy</test_depend>
@@ -19,6 +22,5 @@
   <test_depend>sensor_msgs</test_depend>
   <test_depend>std_msgs</test_depend>
   <test_depend>hill_patrol_testing</test_depend>
-  <test_depend>hill_patrol_bringup</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

@@ -74,7 +74,7 @@ def follower_launch(request, resources):
     assert library.is_file(), 'acceptance must load the installed plugin'
     plugin = ET.SubElement(model, 'plugin', filename=str(library),
                            name='hill_patrol_sim::KinematicFollower')
-    limits = Path(get_package_share_directory('hill_patrol_bringup')) / 'config/m20_limits.yaml'
+    limits = Path(__file__).resolve().parents[2] / 'hill_patrol_bringup/config/m20_limits.yaml'
     sensors_path = sim / 'config/sensors.yaml'
     for key, value in {'height_grid': world_file.parent / 'hill_world_small_body_height.csv',
                        'limits_path': limits, 'sensors_path': sensors_path}.items():
