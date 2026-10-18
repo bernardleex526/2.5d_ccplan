@@ -19,5 +19,6 @@ setup(
     tests_require=['pytest'],
     entry_points={'console_scripts': [
         'global_elevation_builder = hill_patrol_testing.global_elevation_builder:main',
+        'baseline_report = hill_patrol_testing.baseline_report:main',
     ]},
 )

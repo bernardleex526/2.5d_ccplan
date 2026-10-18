@@ -66,3 +66,14 @@ def test_unknown_metric_and_parameter_misuse_error(metrics_path, config):
         thresholds.parameter('elev_err_m')
     assert thresholds.parameter('patrol_laps_N') == 3
     assert not metrics_path.exists()
+
+
+def test_baseline_report_lists_measured_values_without_suggestions():
+    from hill_patrol_testing.baseline_report import render
+    configured = {'loc_pos_err_m': {'value': None, 'direction': 'max'},
+                  'patrol_success_P': {'value': 0.9, 'direction': 'min'},
+                  'elev_err_m': {'value': None, 'direction': 'max'}, 'patrol_laps_N': 3}
+    text = render({'loc_pos_err_m': 0.54, 'patrol_success_P': 1.0, 'diag': {'a': 1}}, configured)
+    assert '| loc_pos_err_m | 0.5400 | not frozen | max |' in text
+    assert '| patrol_success_P | 1.0000 | 0.9 | min |' in text
+    assert 'Not yet measured: elev_err_m' in text and '## diag' in text
