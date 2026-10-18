@@ -52,6 +52,7 @@ def _setup(context):
              output='screen'),
         Node(package='gait_manager', executable='gait_node', name='gait_manager',
              parameters=[{'use_sim_time': True, 'zones_file': zones,
+                          'exit_margin_m': float(LaunchConfiguration('exit_margin').perform(context)),
                           'safety_path': str(config / 'm20_safety.yaml')}],
              output='screen'),
         # Nav2 waits for localization TF before activating its lifecycle nodes.
@@ -67,6 +68,8 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value='small', choices=list(WORLDS)),
         DeclareLaunchArgument('map_dir', default_value='~/hill_patrol_ws/maps/data/hill_world_small'),
         DeclareLaunchArgument('zones_file', default_value=''),
+        DeclareLaunchArgument('exit_margin', default_value='0.0',
+                              description='flat platform band inside zone edges (m)'),
         DeclareLaunchArgument('x', default_value='0.0'),
         DeclareLaunchArgument('y', default_value='0.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),

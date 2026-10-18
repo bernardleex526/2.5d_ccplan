@@ -332,7 +332,9 @@ def trees(hill):
 
     for side in (-1, 1):
         lane(0., hill.end, side * p['trees_offset_y'])
-        lane(-p['turn_offset'], hill.end + p['turn_offset'], hill.return_y + side * p['trees_offset_y'])
+        # Same x span as the hill lane: the connecting legs at x = -turn_offset and
+        # end + turn_offset must stay clear of the lane's tree rows.
+        lane(0., hill.end, hill.return_y + side * p['trees_offset_y'])
     reach = hill.peak / hill.flank
     area = hill.end * 2 * reach
     clearance = p['trees_radius'] + p['trees_offset_y']

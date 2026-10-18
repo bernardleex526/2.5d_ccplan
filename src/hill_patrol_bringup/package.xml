@@ -17,6 +17,7 @@
   <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>traversability_maps</exec_depend>
   <exec_depend>hill_patrol_testing</exec_depend>
+  <exec_depend>patrol_manager</exec_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>launch_pytest</test_depend>
   <export>

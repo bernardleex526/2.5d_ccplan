@@ -79,11 +79,11 @@ controller_server:
       model_dt: 0.1
       batch_size: 1000
       vx_std: 0.2
-      vy_std: 0.2
+      vy_std: 0.05                    # Omni, but prefer walking forward over crabbing (P12 tuning)
       wz_std: 0.4
       vx_max: 0.7
       vx_min: -0.35
-      vy_max: 0.5
+      vy_max: 0.2
       wz_max: 0.7
       iteration_count: 1
       prune_distance: 2.0
@@ -94,7 +94,11 @@ controller_server:
       visualize: false
       regenerate_noises: false
       critics: ["ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic", "PathAlignCritic",
-                "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic"]
+                "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "TwirlingCritic"]
+      TwirlingCritic:
+        enabled: true
+        twirling_cost_power: 1
+        twirling_cost_weight: 10.0
       ConstraintCritic:
         enabled: true
         cost_power: 1
@@ -241,8 +245,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.7, 0.5, 0.7]
-    min_velocity: [-0.35, -0.5, -0.7]
+    max_velocity: [0.7, 0.2, 0.7]
+    min_velocity: [-0.35, -0.2, -0.7]
     max_accel: [1.0, 1.0, 2.0]
     max_decel: [-1.0, -1.0, -2.0]
     deadband_velocity: [0.0, 0.0, 0.0]

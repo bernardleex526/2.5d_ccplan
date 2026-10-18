@@ -160,6 +160,24 @@ def test_trees_clear_walking_lanes_and_stand_on_terrain(world):
         assert z+length/2 == pytest.approx(hill.terrain(x, y)+p['trees_height'])
 
 
+def test_trees_keep_clear_of_the_whole_patrol_route(world):
+    p, products, xml = world['p'], world['products'], world['xml']
+    route = yaml.safe_load(products['route'].read_text())['waypoints']
+    points = [(w['x'], w['y']) for w in route]
+
+    def distance(px, py, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = dx * dx + dy * dy
+        t = 0 if length == 0 else max(0, min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / length))
+        return math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
+    # Half the M20 standing width plus the tree radius must clear every route leg.
+    clearance = 0.43 / 2 + p['trees_radius']
+    for tree in xml.findall("model[@name='trees']/link"):
+        x, y = vector(tree, 'pose')[:2]
+        nearest = min(distance(x, y, a, b) for a, b in zip(points, points[1:]))
+        assert nearest > clearance, f'tree at ({x:.2f}, {y:.2f}) blocks the route ({nearest:.2f} m)'
+
+
 def test_world_declares_sensor_systems(world):
     xml = world['xml']
     names = {plugin.get('name').split('::')[-1] for plugin in xml.findall('plugin')}

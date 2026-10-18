@@ -25,6 +25,7 @@ GOAL_WORLD = (8.4, 0.0)  # top of the 15 deg ramp, on the up_transition platform
 
 
 @pytest.mark.sim
+@pytest.mark.gpu
 def test_single_goal(tmp_path):
     if not (MAP_DIR / 'elevation/elevation.yaml').is_file():
         pytest.skip('run test_mapping_loop and global_elevation_builder first')
