@@ -5,8 +5,8 @@
 # Native world requirements: Fortress Sensors(ogre2), NavSat, Physics, UserCommands,
 # and explicit spherical_coordinates. T16 owns persistent world/ROS bridge wiring.
 # Livox grid replaces non-repetitive scanning; ideal pinhole replaces stereo disparity.
-# D400 rev019 Table3-49 nominal HD87x58; square-pixel 1280x720 pinhole yields
-# VFOV=2*atan(tan(87deg/2)*720/1280) (~56.74deg), not exact factory calibration.
+# D400 rev019 Table3-49 nominal HD87x58; square-pixel 848x480 pinhole yields
+# VFOV=2*atan(tan(87deg/2)*480/848) (~56.4deg), not exact factory calibration.
 body:
   size:
     value: [0.82, 0.43, 0.57]
@@ -50,14 +50,14 @@ d435i:
     value: 87.0
     source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table3-49 HD depth87x58deg; ideal square-pixel projection'
   image_size:
-    value: [1280, 720]
-    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported1280x720; SIMULATION CHOICE HD profile'
+    value: [848, 480]
+    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported848x480 (Intel recommended depth profile); SIMULATION CHOICE review 2026-10-18: ~6.1MB/frame instead of 22MB for elevation mapping'
   update_rate:
     value: 15.0
-    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported15Hz1280x720; SIMULATION CHOICE'
+    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported15Hz848x480; SIMULATION CHOICE'
   clip:
-    value: [0.28, 3.0]
-    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ280mm at1280x720; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range'
+    value: [0.195, 3.0]
+    source: 'https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ195mm at848x480; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range'
   noise_mean:
     value: 0.0
     source: 'SIMULATION CHOICE user delegation 2026-10-13: unbiased Gaussian depth rendering noise'
@@ -83,3 +83,14 @@ gnss:
   noise_mean:
     value: 0.0
     source: 'SIMULATION CHOICE user delegation 2026-10-13: zero mean in native horizontal degrees / vertical metres / velocity m/s'
+imu:
+  update_rate:
+    value: 200.0
+    source: 'SIMULATION CHOICE review 2026-10-18: Livox Mid-360 built-in IMU publishes at 200Hz (livox_ros_driver2 /livox/imu); synthesised by the follower at mid360_frame'
+follower:
+  velocity_time_constant_s:
+    value: 0.15
+    source: 'SIMULATION CHOICE review 2026-10-18: cascaded first-order lag per planar axis; peak acceleration 0.7m/s / (e*0.15s) ~ 1.7m/s2 for a full-scale step; not a measured M20 response'
+  height_time_constant_s:
+    value: 0.1
+    source: 'SIMULATION CHOICE review 2026-10-18: ramp-tracking 3rd-order filter on height/roll/pitch; smooths support-plane kinks, no steady-state slope lag'

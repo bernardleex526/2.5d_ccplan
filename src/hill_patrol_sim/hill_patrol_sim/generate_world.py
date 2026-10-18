@@ -1,30 +1,28 @@
-"""Generate Fortress SDF and terrain products from sourced world parameters.
+"""Generate a Fortress hill world and its terrain products from sourced parameters.
 
-Coordinates: x follows ascent/summit/descent; y=0 is the hill centreline.
-The ground-level return lane is y=-6 m, connected beyond each hill end.
-Ramp length is measured along its 15-degree surface, not its projection.
-CSV contract: x,y,z in metres, Cartesian product of ascending x/y axes,
-rows y-major. Axes include all flight/landing boundaries; consumers locate
-adjacent coordinates for bilinear interpolation (spacing need not be uniform).
-z is the support surface, without an invented M20 body/sensor offset.
-Stair support is linear within each flight and constant on each landing.
+Coordinates: x runs along the hill route (ascent, summit, descent), y=0 is the
+stair centreline, z is up. The walking surface (pads, ramps, transition
+platforms, stair flights and landings, uneven summit) runs along the crest of a
+ridge whose flanks fall at hillside_slope_deg to the ground. The loop returns
+along a ground-level lane at the foot of the ridge.
 
-Additional experimental geometry: 3 m end pads, 1.2 m transition platforms,
-0.2 m foundation below ground, 6 m return-lane separation, 2 m outer turns,
-0.3 m maximum grid spacing, 129-square grayscale heightmap. Colours are
-visual design only. These are not site measurements or decision thresholds.
-Tree feature cylinders extend from ground to support(x)+configured height;
-their upper four metres flank the route, rather than floating in midair.
-Generated mesh/image resources live beside the SDF and use relative URIs.
-The summit visual is a link-local triangular mesh of the same 129 x samples
-and full y extent as the collision heightmap. Fortress rendering6 6.6.4 Terra
-crops 2^n+1 images to 2^n samples, losing the final interval; a faithful mesh
-preserves every sample, both endpoints and the original pitch without changing
-the DART collision geometry. The generated profile is y-invariant, so two
-side vertices per x sample describe exactly the same piecewise-linear surface.
-Numeric text uses Python's round-trip representation across SDF, STL and CSV;
-paired dimensions and poses retain the same binary floating-point values.
-No sensors or decision thresholds are generated here (T14/P13 checkpoint).
+Products written to the output directory:
+  <name>.sdf               world: Physics, Sensors(ogre2), NavSat, spherical coordinates
+  <name>_*.stl / *.obj     collision (binary STL) and visual-only (OBJ) meshes, relative URIs
+  <name>_body_height.csv   follower support: x,y,z Cartesian grid, rows y-major,
+                           ascending nonuniform axes
+  <name>_truth_zones.yaml  stair zones (stair_zones.yaml schema) incl. stair_zone_margin
+  <name>_route.yaml        loop waypoints (waypoints.yaml schema)
+
+Support within the stair corridor is the line through the tread edges of each
+flight (never above a tread, at most one step height below it); everywhere else
+it equals the rendered surface. Hillside undulation, summit roughness and trees
+are deterministic functions of the configured seeds.
+
+Fixed sampling choices (resolution only, not physical parameters): 0.25 m grid
+near walking lanes, 1 m elsewhere; 0.1 m summit profile samples; 1 m x and 2 m
+lateral hillside mesh spacing; 3 m transition/foundation constants come from
+the configuration.
 """
 import argparse
 import csv
@@ -32,10 +30,25 @@ import math
 from pathlib import Path
 import random
 import re
+import struct
 import xml.etree.ElementTree as ET
 
-from PIL import Image
 import yaml
+
+
+FOUNDATION = 0.2  # Boxes and wedges extend below ground so no gaps appear at z=0.
+FINE, COARSE, SUMMIT_SAMPLE, MESH_X, MESH_Y = 0.25, 1.0, 0.1, 1.0, 2.0
+
+SCALARS = ('step_height tread_depth intermediate_landing_depth step_width ramp_length '
+           'summit_length trees_radius trees_height trees_spacing_min trees_spacing_max '
+           'trees_offset_y end_pad_length turn_offset path_shoulder_width '
+           'hillside_undulation_amplitude return_lane_margin summit_roughness_wavelength '
+           'stair_zone_margin').split()
+REQUIRED = SCALARS + ('world_name step_count_up step_count_down flight_max_steps flight_steps_up '
+                      'flight_steps_down ramp_slope_deg summit_roughness_max summit_seed '
+                      'trees_seed stair_zones_count origin_latitude origin_longitude '
+                      'origin_altitude hillside_slope_deg hillside_undulation_wavelength '
+                      'hillside_tree_density').split()
 
 
 def load_params(path):
@@ -53,31 +66,33 @@ def load_params(path):
                for v in values):
             raise ValueError(f'{key}: finite numeric values required')
         p[key] = value
-    required = ('world_name step_count_up step_count_down step_height tread_depth '
-                'flight_max_steps flight_steps_up flight_steps_down intermediate_landing_depth '
-                'step_width ramp_slope_deg ramp_length summit_length summit_roughness_max '
-                'summit_seed trees_seed trees_radius trees_height trees_spacing_min '
-                'trees_spacing_max trees_offset_y stair_zones_count').split()
-    for key in required:
+    for key in REQUIRED:
         if key not in p:
             raise ValueError(f'missing parameter: {key}')
     if not isinstance(p['world_name'], str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', p['world_name']):
         raise ValueError('world_name must be a safe identifier')
-    for key in ('step_height', 'tread_depth', 'intermediate_landing_depth', 'step_width',
-                'ramp_length', 'summit_length', 'trees_radius', 'trees_height',
-                'trees_spacing_min', 'trees_spacing_max', 'trees_offset_y'):
+    for key in SCALARS:
         if not isinstance(p[key], (int, float)) or p[key] <= 0:
             raise ValueError(f'{key} must be positive')
-    if not 0 < p['ramp_slope_deg'] < 90:
-        raise ValueError('ramp_slope_deg must be in (0,90)')
+    for key in ('ramp_slope_deg', 'hillside_slope_deg'):
+        if not 0 < p[key] < 90:
+            raise ValueError(f'{key} must be in (0,90)')
     if not 0 <= p['summit_roughness_max'] <= .10:
         raise ValueError('summit_roughness_max must be in [0,0.10] metres')
     if p['trees_spacing_max'] < p['trees_spacing_min']:
         raise ValueError('tree spacing interval is inverted')
     if p['trees_offset_y'] - p['trees_radius'] <= p['step_width'] / 2:
         raise ValueError('trees interfere with walking surface')
-    if p['step_width'] + 2 * p['trees_offset_y'] + 2 * p['trees_radius'] >= 6:
-        raise ValueError('hill and return lane features interfere')
+    if p['trees_offset_y'] + p['trees_radius'] >= p['return_lane_margin']:
+        raise ValueError('return lane trees interfere with the hillside foot')
+    wavelengths = p['hillside_undulation_wavelength']
+    if (not isinstance(wavelengths, list) or len(wavelengths) != 2
+            or not 0 < wavelengths[0] <= wavelengths[1]):
+        raise ValueError('hillside_undulation_wavelength must be an ordered positive pair')
+    if not isinstance(p['hillside_tree_density'], (int, float)) or p['hillside_tree_density'] < 0:
+        raise ValueError('hillside_tree_density must be nonnegative')
+    if p['stair_zone_margin'] >= p['intermediate_landing_depth']:
+        raise ValueError('stair_zone_margin must stay on the transition platforms')
     for direction in ('up', 'down'):
         flights = p[f'flight_steps_{direction}']
         if (not isinstance(flights, list) or not flights or
@@ -92,26 +107,166 @@ def load_params(path):
     return p
 
 
+def numbers(values):
+    return ' '.join(repr(float(v)) if isinstance(v, float) else str(v) for v in values)
+
+
 def text(parent, tag, value):
     node = ET.SubElement(parent, tag)
-    node.text = str(value)
+    node.text = value if isinstance(value, str) else numbers(value) if isinstance(value, (list, tuple)) else repr(value)
     return node
 
 
-def numbers(values):
-    return ' '.join(str(v) for v in values)
+def write_obj(path, vertices, faces):
+    lines = ['# generated by generate_world.py']
+    lines += ['v ' + numbers(v) for v in vertices]
+    lines += ['f ' + ' '.join(str(i + 1) for i in face) for face in faces]
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
 
 
-def model(world, name):
-    node = ET.SubElement(world, 'model', name=name)
-    text(node, 'static', 'true')
-    return node
+def write_stl(path, vertices, faces):
+    # Collision meshes use binary STL: Fortress DART/ODE crashes on OBJ collision meshes.
+    data = [b'generated by generate_world.py'.ljust(80, b' '), struct.pack('<I', len(faces))]
+    for face in faces:
+        a, b, c = (vertices[i] for i in face)
+        u = [b[k]-a[k] for k in range(3)]
+        v = [c[k]-a[k] for k in range(3)]
+        n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
+        norm = math.sqrt(sum(x*x for x in n)) or 1.
+        data.append(struct.pack('<12fH', *(x/norm for x in n), *a, *b, *c, 0))
+    path.write_bytes(b''.join(data))
 
 
-def solid(parent, name, pose, kind, geometry, colour):
+class Hill:
+    """Analytic route profile and terrain shared by every generated product."""
+
+    def __init__(self, p):
+        self.p = p
+        self.width = p['step_width']
+        self.corridor = p['step_width'] / 2 + p['path_shoulder_width']
+        self.flank = math.tan(math.radians(p['hillside_slope_deg']))
+        slope = math.radians(p['ramp_slope_deg'])
+        self.run, self.rise = p['ramp_length'] * math.cos(slope), p['ramp_length'] * math.sin(slope)
+        self.segments = []  # (x0, x1, z0, z1, kind, label)
+        self.steps = {'up': [], 'down': []}  # (x0, top)
+        self.zones = []
+        self._build_profile()
+        self.peak = max(max(s[2], s[3]) for s in self.segments) + p['summit_roughness_max']
+        self.return_y = -(self.corridor + self.peak / self.flank + p['return_lane_margin'])
+        self._build_undulation()
+
+    def _flat(self, length, label):
+        self.segments.append((self.x, self.x + length, self.z, self.z, 'flat', label))
+        self.x += length
+
+    def _build_profile(self):
+        p = self.p
+        h, d, landing = p['step_height'], p['tread_depth'], p['intermediate_landing_depth']
+        self.x, self.z = 0., 0.
+        self._flat(p['end_pad_length'], 'start_pad')
+        self.segments.append((self.x, self.x + self.run, 0., self.rise, 'ramp', 'ramp_up'))
+        self.x += self.run
+        self.z = self.rise
+        self._flat(landing, 'up_transition')
+        for direction in ('up', 'down'):
+            sign = 1 if direction == 'up' else -1
+            start = self.x
+            flights = p['flight_steps_' + direction]
+            for index, count in enumerate(flights):
+                z_end = self.z + sign * count * h
+                self.segments.append((self.x, self.x + count * d, self.z, z_end, 'flight',
+                                      f'{direction}_flight_{index}'))
+                for i in range(count):
+                    top = self.z + (i + 1) * h if direction == 'up' else self.z - i * h
+                    self.steps[direction].append((self.x + i * d, top))
+                self.x += count * d
+                self.z = z_end
+                if index < len(flights) - 1:
+                    self._flat(landing, f'{direction}_landing_{index}')
+            m, half = p['stair_zone_margin'], self.width / 2 + p['stair_zone_margin']
+            x0, x1 = start - m, self.x + m
+            self.zones.append({'id': 'stair_' + direction, 'gait': 14, 'polygon': [
+                [x0, -half], [x1, -half], [x1, half], [x0, half], [x0, -half]]})
+            if direction == 'up':
+                self._flat(landing, 'summit_entry')
+                self.summit = (self.x, self.z, self._summit_profile())
+                self.segments.append((self.x, self.x + p['summit_length'], self.z, self.z,
+                                      'summit', 'summit_uneven'))
+                self.x += p['summit_length']
+                self._flat(landing, 'summit_exit')
+        self._flat(landing, 'down_transition')
+        self.segments.append((self.x, self.x + self.run, self.rise, 0., 'ramp', 'ramp_down'))
+        self.x += self.run
+        self.z = 0.
+        self._flat(p['end_pad_length'], 'end_pad')
+        self.end = self.x
+
+    def _summit_profile(self):
+        """Smooth nonnegative roughness: windowed random sinusoids, peak exactly summit_roughness_max."""
+        p = self.p
+        length, shortest = p['summit_length'], p['summit_roughness_wavelength']
+        count = max(1, math.ceil(length / SUMMIT_SAMPLE))
+        rng = random.Random(f"{p['summit_seed']}-summit")
+        waves = [(rng.uniform(shortest, max(shortest, length)), rng.uniform(0, 2 * math.pi))
+                 for _ in range(6)]
+        values = []
+        for i in range(count + 1):
+            u = i / count
+            g = sum(math.sin(2 * math.pi * u * length / lam + phi) for lam, phi in waves)
+            window = 0. if i in (0, count) else math.sin(math.pi * u) ** 2
+            values.append(window * (g + len(waves)) / (2 * len(waves)))
+        peak = max(values)
+        return [length * i / count for i in range(count + 1)], [
+            (v / peak if peak > 0 else 0.) * p['summit_roughness_max'] for v in values]
+
+    def _build_undulation(self):
+        p = self.p
+        rng = random.Random(f"{p['summit_seed']}-hillside")
+        lo, hi = p['hillside_undulation_wavelength']
+        self.waves = []
+        for _ in range(6):
+            k = 2 * math.pi / rng.uniform(lo, hi)
+            angle = rng.uniform(0, 2 * math.pi)
+            self.waves.append((k * math.cos(angle), k * math.sin(angle), rng.uniform(0, 2 * math.pi)))
+
+    def support(self, x):
+        """Route profile height at x (stair flights: tread-edge line); 0 off the hill."""
+        for x0, x1, z0, z1, kind, _ in self.segments:
+            if x0 <= x <= x1:
+                if kind == 'summit':
+                    xs, zs = self.summit[2]
+                    u = x - x0
+                    i = min(len(xs) - 2, int(u / (xs[1] - xs[0])))
+                    t = (u - xs[i]) / (xs[i + 1] - xs[i])
+                    return z0 + zs[i] + t * (zs[i + 1] - zs[i])
+                return z0 + (z1 - z0) * (x - x0) / (x1 - x0)
+        return 0.
+
+    def terrain(self, x, y, crest=None):
+        """Body/terrain height: route profile inside the corridor, undulating flanks outside."""
+        crest = self.support(x) if crest is None else crest
+        distance = abs(y) - self.corridor
+        if distance <= 0:
+            return crest
+        base = max(0., crest - distance * self.flank)
+        if base == 0.:
+            return 0.
+        amplitude = self.p['hillside_undulation_amplitude']
+        weight = min(1., distance / self.p['hillside_undulation_wavelength'][0]) * min(1., base / amplitude)
+        wave = sum(math.cos(kx * x + ky * y + phi) for kx, ky, phi in self.waves) / len(self.waves)
+        return base + weight * amplitude * wave
+
+    def x_breaks(self):
+        values = {s[0] for s in self.segments} | {s[1] for s in self.segments}
+        x0 = self.summit[0]
+        values |= {x0 + u for u in self.summit[2][0]}
+        return values
+
+
+def solid(parent, name, pose, kind, geometry, colour, collision=True):
     link = ET.SubElement(parent, 'link', name=name)
-    text(link, 'pose', numbers(pose))
-    for tag in ('collision', 'visual'):
+    text(link, 'pose', pose)
+    for tag in (('collision', 'visual') if collision else ('visual',)):
         node = ET.SubElement(link, tag, name=tag)
         geom = ET.SubElement(ET.SubElement(node, 'geometry'), kind)
         for key, value in geometry.items():
@@ -123,217 +278,213 @@ def solid(parent, name, pose, kind, geometry, colour):
     return link
 
 
-def wedge(path, length, width, z0, z1):
-    """Closed triangularised ramp with vertical ends; no tilted-box overlap."""
-    vertices = [(0, -width/2, -.2), (length, -width/2, -.2),
-                (length, width/2, -.2), (0, width/2, -.2),
-                (0, -width/2, z0), (length, -width/2, z1),
-                (length, width/2, z1), (0, width/2, z0)]
-    faces = [(0,3,2,1), (4,5,6,7), (0,1,5,4), (1,2,6,5), (2,3,7,6), (3,0,4,7)]
-    lines = ['solid ramp']
-    for a,b,c,d in faces:
-        for tri in ((a,b,c), (a,c,d)):
-            u,v,w = [vertices[i] for i in tri]
-            ab = [v[i]-u[i] for i in range(3)]
-            ac = [w[i]-u[i] for i in range(3)]
-            normal = [ab[1]*ac[2]-ab[2]*ac[1], ab[2]*ac[0]-ab[0]*ac[2], ab[0]*ac[1]-ab[1]*ac[0]]
-            norm = math.sqrt(sum(n*n for n in normal))
-            lines.extend(['facet normal '+numbers([n/norm for n in normal]), 'outer loop'])
-            lines.extend('vertex '+numbers(point) for point in (u,v,w))
-            lines.extend(['endloop', 'endfacet'])
-    path.write_text('\n'.join(lines + ['endsolid ramp'])+'\n')
+def wedge(length, width, z0, z1):
+    vertices = [(0, -width / 2, -FOUNDATION), (length, -width / 2, -FOUNDATION),
+                (length, width / 2, -FOUNDATION), (0, width / 2, -FOUNDATION),
+                (0, -width / 2, z0), (length, -width / 2, z1),
+                (length, width / 2, z1), (0, width / 2, z0)]
+    quads = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    return vertices, [tri for a, b, c, d in quads for tri in ((a, b, c), (a, c, d))]
 
 
-def summit_surface(path, profile, length, width, roughness):
-    """Exact top surface of the y-invariant collision heightmap, link-local."""
-    intervals = len(profile) - 1
-    lines = ['solid summit_surface']
-    for column in range(intervals):
-        x0 = -length/2 + length*column/intervals
-        x1 = -length/2 + length*(column+1)/intervals
-        z0 = profile[column]/255*roughness
-        z1 = profile[column+1]/255*roughness
-        a, b = (x0,-width/2,z0), (x1,-width/2,z1)
-        c, d = (x1,width/2,z1), (x0,width/2,z0)
-        # Both upward triangles share z(x); a diagonal cannot alter this plane.
-        nx, nz = -(z1-z0), x1-x0
-        norm = math.hypot(nx, nz)
-        normal = numbers([nx/norm, 0., nz/norm])
-        for triangle in ((a,b,c), (a,c,d)):
-            lines.extend(['facet normal '+normal, 'outer loop'])
-            lines.extend('vertex '+numbers(point) for point in triangle)
-            lines.extend(['endloop', 'endfacet'])
-    path.write_text('\n'.join(lines + ['endsolid summit_surface'])+'\n')
+def strip(xs, zs, width):
+    """Upward-facing y-invariant surface strip over x samples."""
+    vertices = [(x, sign * width / 2, z) for x, z in zip(xs, zs) for sign in (-1, 1)]
+    faces = []
+    for i in range(len(xs) - 1):
+        a, b, c, d = 2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1
+        faces += [(a, b, c), (a, c, d)]
+    return vertices, faces
+
+
+def hillside(hill, side, xs):
+    """Shoulder plus flank surface for one side (side=+1 left, -1 right), visual only."""
+    p = hill.p
+    far = hill.corridor + hill.peak / hill.flank + 1
+    offsets = [p['step_width'] / 2, hill.corridor]
+    offsets += [hill.corridor + k * MESH_Y for k in range(1, math.ceil((far - hill.corridor) / MESH_Y) + 1)]
+    crest = [hill.support(x) for x in xs]
+    grid = [[hill.terrain(x, side * o, c) for o in offsets] for x, c in zip(xs, crest)]
+    vertices = [(x, side * o, grid[i][j]) for i, x in enumerate(xs) for j, o in enumerate(offsets)]
+    n = len(offsets)
+    faces = []
+    for i in range(len(xs) - 1):
+        for j in range(n - 1):
+            a, b, c, d = i * n + j, (i + 1) * n + j, (i + 1) * n + j + 1, i * n + j + 1
+            for tri in ((a, b, c), (a, c, d)):
+                if any(vertices[k][2] > 0 for k in tri):
+                    faces.append(tri if side > 0 else (tri[0], tri[2], tri[1]))
+    used = sorted({k for face in faces for k in face})
+    index = {k: i for i, k in enumerate(used)}
+    return [vertices[k] for k in used], [tuple(index[k] for k in face) for face in faces]
+
+
+def trees(hill):
+    p = hill.p
+    rng = random.Random(p['trees_seed'])
+    placed = []
+
+    def lane(x0, x1, y):
+        x = x0
+        while x <= x1:
+            placed.append((x, y))
+            x += rng.uniform(p['trees_spacing_min'], p['trees_spacing_max'])
+
+    for side in (-1, 1):
+        lane(0., hill.end, side * p['trees_offset_y'])
+        lane(-p['turn_offset'], hill.end + p['turn_offset'], hill.return_y + side * p['trees_offset_y'])
+    reach = hill.peak / hill.flank
+    area = hill.end * 2 * reach
+    clearance = p['trees_radius'] + p['trees_offset_y']
+    for _ in range(round(p['hillside_tree_density'] * area / 100)):
+        x = rng.uniform(0., hill.end)
+        y = rng.choice((-1, 1)) * rng.uniform(hill.corridor + p['trees_radius'], hill.corridor + reach)
+        if (hill.terrain(x, y) > 0 and abs(y - hill.return_y) > clearance):
+            placed.append((x, y))
+    r = p['trees_radius']
+    result = []
+    for x, y in placed:
+        bottom = min(hill.terrain(x + dx, y + dy) for dx in (-r, r) for dy in (-r, r))
+        top = hill.terrain(x, y) + p['trees_height']
+        result.append((x, y, bottom, top))
+    return result
+
+
+def support_grid(hill):
+    p = hill.p
+    turn = p['turn_offset']
+    x_lo, x_hi = -turn - 1, hill.end + turn + 1
+    xs = {round(x_lo + i * FINE, 9) for i in range(math.ceil((x_hi - x_lo) / FINE) + 1)}
+    xs |= {round(v, 9) for v in hill.x_breaks()}
+    y_lo, y_hi = hill.return_y - 1.5, hill.corridor + 1
+    ys = {round(v, 9) for v in (p['step_width'] / 2, -p['step_width'] / 2, hill.corridor,
+                                -hill.corridor, hill.return_y)}
+    ys |= {round(-hill.corridor - 1 + i * FINE, 9) for i in range(math.ceil((2 * hill.corridor + 2) / FINE) + 1)}
+    ys |= {round(hill.return_y - 1.5 + i * FINE, 9) for i in range(13)}
+    ys |= {round(-hill.corridor - 1 - k * COARSE, 9)
+           for k in range(1, math.ceil((-hill.corridor - 1 - y_lo) / COARSE))}
+    xs, ys = sorted(x for x in xs if x_lo <= x <= x_hi), sorted(y for y in ys if y_lo <= y <= y_hi)
+    crest = {x: hill.support(x) for x in xs}
+    return xs, ys, [[hill.terrain(x, y, crest[x]) for x in xs] for y in ys]
 
 
 def generate_world(config, output_dir):
     p = load_params(config)
+    hill = Hill(p)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    name = p['world_name']
-    width = p['step_width']
-    slope = math.radians(p['ramp_slope_deg'])
-    run = p['ramp_length'] * math.cos(slope)
-    rise = p['ramp_length'] * math.sin(slope)
-    h, d, landing = p['step_height'], p['tread_depth'], p['intermediate_landing_depth']
+    name, width = p['world_name'], p['step_width']
+
     root = ET.Element('sdf', version='1.8')
     world = ET.SubElement(root, 'world', name=name)
     text(world, 'gravity', '0 0 -9.8')
     physics = ET.SubElement(world, 'physics', name='default', type='ignored')
-    text(physics, 'max_step_size', '.001')
+    text(physics, 'max_step_size', '0.001')
     text(physics, 'real_time_factor', '1')
     for filename, classname in [('ignition-gazebo-physics-system', 'Physics'),
                                 ('ignition-gazebo-user-commands-system', 'UserCommands'),
-                                ('ignition-gazebo-scene-broadcaster-system', 'SceneBroadcaster')]:
-        ET.SubElement(world, 'plugin', filename=filename, name='ignition::gazebo::systems::'+classname)
+                                ('ignition-gazebo-scene-broadcaster-system', 'SceneBroadcaster'),
+                                ('ignition-gazebo-sensors-system', 'Sensors'),
+                                ('ignition-gazebo-navsat-system', 'NavSat')]:
+        plugin = ET.SubElement(world, 'plugin', filename=filename,
+                               name='ignition::gazebo::systems::' + classname)
+        if classname == 'Sensors':
+            text(plugin, 'render_engine', 'ogre2')
+    spherical = ET.SubElement(world, 'spherical_coordinates')
+    text(spherical, 'surface_model', 'EARTH_WGS84')
+    text(spherical, 'world_frame_orientation', 'ENU')
+    text(spherical, 'latitude_deg', float(p['origin_latitude']))
+    text(spherical, 'longitude_deg', float(p['origin_longitude']))
+    text(spherical, 'elevation', float(p['origin_altitude']))
+    text(spherical, 'heading_deg', 0.)
     light = ET.SubElement(world, 'light', name='sun', type='directional')
     text(light, 'pose', '0 0 100 0 0 0')
     text(light, 'diffuse', '.8 .8 .8 1')
     text(light, 'specular', '.2 .2 .2 1')
     text(light, 'direction', '-.5 .1 -.9')
-    solid(model(world, 'ground'), 'ground', [0,0,0,0,0,0], 'plane',
-          {'normal':'0 0 1', 'size':'2000 2000'}, '.3 .4 .25 1')
-    path_model = model(world, 'path')
-    segments = []  # x0,x1,z0,z1,label; support surface, not discrete stairs
-    zones = []
-    x, z = 0., 0.
+    ground = ET.SubElement(world, 'model', name='ground')
+    text(ground, 'static', 'true')
+    solid(ground, 'ground', [0, 0, 0, 0, 0, 0], 'plane', {'normal': '0 0 1', 'size': '4000 4000'},
+          '.3 .4 .25 1')
 
-    def flat(length, label):
-        nonlocal x
-        solid(path_model, label, [x+length/2,0,(z-.2)/2,0,0,0], 'box',
-              {'size':numbers([length,width,z+.2])}, '.5 .5 .5 1')
-        segments.append((x,x+length,z,z,label))
-        x += length
-
-    flat(3., 'start_pad')
-    ramp_up_start = x
+    path_model = ET.SubElement(world, 'model', name='path')
+    text(path_model, 'static', 'true')
+    for x0, x1, z0, z1, kind, label in hill.segments:
+        if kind == 'flat':
+            solid(path_model, label, [(x0 + x1) / 2, 0, (z0 - FOUNDATION) / 2, 0, 0, 0], 'box',
+                  {'size': [x1 - x0, width, z0 + FOUNDATION]}, '.5 .5 .5 1')
+        elif kind == 'ramp':
+            mesh = out / f'{name}_{label}.stl'
+            write_stl(mesh, *wedge(x1 - x0, width, z0, z1))
+            solid(path_model, label, [x0, 0, 0, 0, 0, 0], 'mesh', {'uri': mesh.name}, '.55 .5 .4 1')
+        elif kind == 'summit':
+            mesh = out / f'{name}_summit.stl'
+            xs, zs = hill.summit[2]
+            write_stl(mesh, *strip(xs, zs, width))
+            solid(path_model, label, [x0, 0, z0, 0, 0, 0], 'mesh', {'uri': mesh.name}, '.45 .4 .3 1')
     for direction in ('up', 'down'):
-        if direction == 'up':
-            path = out / f'{name}_ramp_up.stl'
-            wedge(path, run, width, 0., rise)
-            solid(path_model, 'ramp_up', [x,0,0,0,0,0], 'mesh', {'uri':path.name}, '.55 .5 .4 1')
-            segments.append((x,x+run,0.,rise,'ramp_up'))
-            x += run
-            z = rise
-            flat(landing, 'up_transition')
-        start = x
-        stairs = model(world, 'stairs_'+direction)
-        step_index = 0
-        for flight_index, count in enumerate(p['flight_steps_'+direction]):
-            z_end = z + (1 if direction == 'up' else -1) * count*h
-            segments.append((x,x+count*d,z,z_end,f'{direction}_flight_{flight_index}'))
-            for i in range(count):
-                top = z+(i+1)*h if direction == 'up' else z-i*h
-                solid(stairs, f'step_{step_index}', [x+(i+.5)*d,0,(top-.2)/2,0,0,0],
-                      'box', {'size':numbers([d,width,top+.2])}, '.55 .55 .55 1')
-                step_index += 1
-            x += count*d
-            z = z_end
-            if flight_index < len(p['flight_steps_'+direction])-1:
-                flat(landing, f'{direction}_landing_{flight_index}')
-        zones.append({'id':'stair_'+direction, 'gait':14,
-                      'polygon':[[start,-width/2],[x,-width/2],[x,width/2],[start,width/2],[start,-width/2]]})
-        if direction == 'up':
-            flat(landing, 'summit_entry')
-            summit_start, summit_z = x,z
-            # Grayscale values are shared by collision, visual, and support grid.
-            rng = random.Random(p['summit_seed'])
-            profile = [0] + [rng.randrange(256) for _ in range(127)] + [0]
-            profile[64] = 255  # explicit normalisation: maximum is configured .10m
-            image = Image.new('L', (129,129))
-            image.putdata(profile * 129)
-            image_path = out / f'{name}_heightmap.png'
-            image.save(image_path)
-            summit = solid(path_model, 'summit_uneven', [x+p['summit_length']/2,0,z,0,0,0], 'heightmap',
-                           {'uri':image_path.name, 'size':numbers([p['summit_length'],width,p['summit_roughness_max']]),
-                            'pos':'0 0 0'}, '.45 .4 .3 1')
-            # Ogre2 Terra crops the final row/column of this collision image.
-            # Replace only the visual; the original heightmap, link pose,
-            # material and collision remain unchanged.
-            visual_path = out / f'{name}_terrain_visual.stl'
-            summit_surface(visual_path, profile, p['summit_length'], width,
-                           p['summit_roughness_max'])
-            geometry = summit.find('visual/geometry')
-            geometry.remove(geometry.find('heightmap'))
-            text(ET.SubElement(geometry, 'mesh'), 'uri', visual_path.name)
-            segments.append((x,x+p['summit_length'],z,z,'summit_uneven'))
-            x += p['summit_length']
-            flat(landing, 'summit_exit')
-    flat(landing, 'down_transition')
-    path = out / f'{name}_ramp_down.stl'
-    wedge(path, run, width, rise, 0.)
-    solid(path_model, 'ramp_down', [x,0,0,0,0,0], 'mesh', {'uri':path.name}, '.55 .5 .4 1')
-    segments.append((x,x+run,z,0.,'ramp_down'))
-    x += run
-    z = 0.
-    flat(3., 'end_pad')
-    end = x
+        stairs = ET.SubElement(world, 'model', name='stairs_' + direction)
+        text(stairs, 'static', 'true')
+        for index, (x0, top) in enumerate(hill.steps[direction]):
+            solid(stairs, f'step_{index}', [x0 + p['tread_depth'] / 2, 0, (top - FOUNDATION) / 2, 0, 0, 0],
+                  'box', {'size': [p['tread_depth'], width, top + FOUNDATION]}, '.55 .55 .55 1')
 
-    def support(xq):
-        for a,b,za,zb,label in segments:
-            if a <= xq <= b:
-                if label == 'summit_uneven':
-                    pos = (xq-a)/(b-a)*128
-                    i = min(127, int(pos))
-                    fraction = pos-i
-                    return za + ((1-fraction)*profile[i]+fraction*profile[i+1])/255*p['summit_roughness_max']
-                return za + (zb-za)*(xq-a)/(b-a)
-        return 0.
+    mesh_xs = sorted({round(i * MESH_X, 9) for i in range(math.ceil(hill.end / MESH_X) + 1)}
+                     | {round(v, 9) for v in hill.x_breaks()})
+    terrain = ET.SubElement(world, 'model', name='hillside')
+    text(terrain, 'static', 'true')
+    for side, label in ((1, 'left'), (-1, 'right')):
+        mesh = out / f'{name}_hillside_{label}.obj'
+        write_obj(mesh, *hillside(hill, side, mesh_xs))
+        # Rendering only: the follower uses the support grid, never mesh contacts.
+        solid(terrain, label, [0, 0, 0, 0, 0, 0], 'mesh', {'uri': mesh.name}, '.35 .42 .25 1',
+              collision=False)
 
-    trees = model(world, 'trees')
-    rng = random.Random(p['trees_seed'])
-    tree_index = 0
-    for lane in (0., -6.):
-        for side in (-1,1):
-            tx = 0.
-            while tx <= end:
-                ty = lane + side*p['trees_offset_y']
-                # Grounded feature cylinders reach four metres above the route.
-                length = (support(tx) if lane == 0 else 0.) + p['trees_height']
-                solid(trees, f'tree_{tree_index}', [tx,ty,length/2,0,0,0],
-                      'cylinder', {'radius':p['trees_radius'], 'length':length}, '.25 .18 .1 1')
-                tree_index += 1
-                tx += rng.uniform(p['trees_spacing_min'],p['trees_spacing_max'])
+    forest = ET.SubElement(world, 'model', name='trees')
+    text(forest, 'static', 'true')
+    for index, (x, y, bottom, top) in enumerate(trees(hill)):
+        solid(forest, f'tree_{index}', [x, y, (bottom + top) / 2, 0, 0, 0], 'cylinder',
+              {'radius': p['trees_radius'], 'length': top - bottom}, '.25 .18 .1 1')
 
-    # Include every support break and heightmap pixel column in the x axis.
-    xs = {round(-2+i*(end+4)/math.ceil((end+4)/.3),12) for i in range(math.ceil((end+4)/.3)+1)}
-    xs.update(round(v,12) for seg in segments for v in seg[:2])
-    xs.update(round(summit_start+i*p['summit_length']/128,12) for i in range(129))
-    ys = sorted({round(-8+i*.25,12) for i in range(41)} | {-width/2,0.,width/2})
+    xs, ys, zs = support_grid(hill)
     csv_path = out / f'{name}_body_height.csv'
     with csv_path.open('w', newline='') as stream:
         writer = csv.writer(stream)
-        writer.writerow(['x','y','z'])
-        for y in ys:
-            for xx in sorted(xs):
-                writer.writerow([xx, y, support(xx) if abs(y) <= width/2 else 0.])
+        writer.writerow(['x', 'y', 'z'])
+        for y, row in zip(ys, zs):
+            for x, z in zip(xs, row):
+                writer.writerow([repr(x), repr(y), repr(z)])
     zone_path = out / f'{name}_truth_zones.yaml'
-    zone_path.write_text(yaml.safe_dump({'zones':zones}, sort_keys=False), encoding='utf-8')
-    # Forward centreline explicitly visits all flights/landings and uneven knots.
-    points = [(0.,0.)] + [(seg[1],0.) for seg in segments]
-    points.extend([(end+2,0.),(end+2,-6.),(-2.,-6.),(-2.,0.),(0.,0.)])
+    zone_path.write_text(yaml.safe_dump({'zones': hill.zones}, sort_keys=False),
+                         encoding='utf-8', newline='\n')
+    turn = p['turn_offset']
+    points = [(0., 0.)] + [(s[1], 0.) for s in hill.segments]
+    points += [(hill.end + turn, 0.), (hill.end + turn, hill.return_y),
+               (-turn, hill.return_y), (-turn, 0.), (0., 0.)]
     waypoints = []
-    for i,(px,py) in enumerate(points):
-        nx,ny = points[i+1] if i+1 < len(points) else points[1]
-        waypoints.append({'id':f'wp_{i}', 'x':px, 'y':py, 'yaw':math.atan2(ny-py,nx-px)})
+    for i, (px, py) in enumerate(points):
+        nx, ny = points[i + 1] if i + 1 < len(points) else points[1]
+        waypoints.append({'id': f'wp_{i}', 'x': px, 'y': py, 'yaw': math.atan2(ny - py, nx - px)})
     route_path = out / f'{name}_route.yaml'
-    route_path.write_text(yaml.safe_dump({'waypoints':waypoints}, sort_keys=False), encoding='utf-8')
+    route_path.write_text(yaml.safe_dump({'waypoints': waypoints}, sort_keys=False),
+                          encoding='utf-8', newline='\n')
     ET.indent(root)
     sdf_path = out / f'{name}.sdf'
     ET.ElementTree(root).write(sdf_path, encoding='utf-8', xml_declaration=True)
-    return {'sdf':sdf_path, 'body_height':csv_path, 'truth_zones':zone_path, 'route':route_path}
+    return {'sdf': sdf_path, 'body_height': csv_path, 'truth_zones': zone_path, 'route': route_path}
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('config', type=Path)
-    parser.add_argument('--output-dir', type=Path, default=Path(__file__).resolve().parents[1]/'worlds')
+    parser.add_argument('--output-dir', type=Path, required=True)
     args = parser.parse_args()
     try:
         products = generate_world(args.config, args.output_dir)
     except (ValueError, KeyError, TypeError, OSError) as error:
         parser.exit(2, f'world generation error: {error}\n')
-    for kind,path in products.items():
+    for kind, path in products.items():
         print(f'{kind}: {path}')
 
 

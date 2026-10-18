@@ -112,7 +112,7 @@ def test_invalid_axis_limit_raises(axis, invalid, limits):
 
 def test_yaml_numeric_gait_schema():
     config = Path(__file__).resolve().parents[2] / 'hill_patrol_bringup/config/m20_limits.yaml'
-    with config.open() as stream:
+    with config.open(encoding='utf-8') as stream:
         configured = yaml.safe_load(stream)
     assert configured == {
         1: {'x': 0.7, 'y': 0.5, 'yaw': 0.7},

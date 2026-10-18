@@ -106,3 +106,44 @@ origin_longitude:
 origin_altitude:
   value: 0.0
   source: "实验设计值（第 5.3 节与任务 T24）"
+
+# 山体与路线几何（review 修复 2026-10-18 新增；实验设计值（AI 提议），待用户确认）
+end_pad_length:
+  value: 3.0
+  source: "实验设计值：起终点平地长度（原生成器内常量，移入配置）"
+
+turn_offset:
+  value: 2.0
+  source: "实验设计值：环线在山体两端外侧转弯的纵向距离（原生成器内常量，移入配置）"
+
+path_shoulder_width:
+  value: 2.0
+  source: "实验设计值：步道两侧路肩宽度；路侧树木位于路肩内"
+
+hillside_slope_deg:
+  value: 30.0
+  source: "实验设计值：山体侧坡坡度"
+
+hillside_undulation_amplitude:
+  value: 0.5
+  source: "实验设计值：山坡低频起伏幅值（为雷达提供特征）"
+
+hillside_undulation_wavelength:
+  value: [8.0, 30.0]
+  source: "实验设计值：山坡起伏波长范围（米）"
+
+hillside_tree_density:
+  value: 0.5
+  source: "实验设计值：山坡树木密度（棵/100 m²）"
+
+return_lane_margin:
+  value: 5.0
+  source: "实验设计值：坡脚到山脚回程道的横向距离"
+
+summit_roughness_wavelength:
+  value: 1.0
+  source: "实验设计值：山顶起伏最小波长（米），避免逐像素高度突变"
+
+stair_zone_margin:
+  value: 1.0
+  source: "实验设计值：台阶区向外扩展距离 ≥ M20 半机身长 0.41 m + 制动余量"

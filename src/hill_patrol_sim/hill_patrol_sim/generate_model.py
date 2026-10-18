@@ -4,8 +4,9 @@ Run from the package directory (or set PYTHONPATH to the package):
 python3 -m hill_patrol_sim.generate_model --config config/sensors.yaml \
     --output models/m20_proxy/model.sdf
 
-The standing-envelope box is a collision abstraction. base_link is its centre;
-all sensor origins are rigid semantic frames on that single inertial link.
+The standing-envelope box is a visual abstraction without collision or gravity:
+the kinematic follower plugin owns the pose. base_link is its centre; all
+sensor origins are rigid semantic frames on that single link.
 Native gpu_lidar appends /points to /mid360; bridge to ROS /points_raw in T16.
 Fortress depth outputs use camera x-forward/y-left/z-up coordinates. The optical
 semantic frame is provided separately; never relabel native XYZ as ROS optical.
@@ -13,15 +14,8 @@ A host world needs Physics, Sensors(ogre2), NavSat and spherical_coordinates.
 No real calibration, stereo disparity, Livox scan timing, multipath or RTK state
 is represented. sources in YAML are preserved beside numeric SDF leaves.
 
-For the 22,118,400-byte depth cloud, opt in separately on the ROS bridge and
-each ROS consumer (substitute an absolute checkout path; no global settings):
-env RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
-    FASTRTPS_DEFAULT_PROFILES_FILE=/home/lee/hill_patrol_ws/src/hill_patrol_sim/config/fastdds_large_sensor.xml \
-    <bridge-or-consumer-command>
-The Fast DDS 2.6.12 profile reserves 256 MiB SHM per participant, retains UDPv4
-and default fragmentation, and does not change SensorDataQoS best-effort depth 5.
-RMW_FASTRTPS_USE_QOS_FROM_XML is unnecessary for participant transport settings.
-Gazebo native transport is unaffected; this is not T16 launch integration.
+The 848x480 depth cloud is about 6.1 MB per frame (16-byte XYZ points), within
+the default Fast DDS transport; no large-message DDS profile is needed.
 """
 import argparse
 import math
@@ -40,6 +34,8 @@ FIELDS = {
               'update_rate': 0, 'clip': 2, 'noise_mean': 0, 'noise_stddev': 0},
     'gnss': {'mount': 6, 'update_rate': 0, 'horizontal_noise_stddev_deg': 0,
              'vertical_noise_stddev': 0, 'velocity_noise_stddev': 0, 'noise_mean': 0},
+    'imu': {'update_rate': 0},
+    'follower': {'velocity_time_constant_s': 0, 'height_time_constant_s': 0},
 }
 
 
@@ -86,7 +82,8 @@ def load_sensors(path):
     for section, entries in values.items():
         for key, value in entries.items():
             numbers = value if isinstance(value, list) else [value]
-            if key in ('size','mass','update_rate','samples','image_size','range_resolution'):
+            if key in ('size','mass','update_rate','samples','image_size','range_resolution',
+                       'velocity_time_constant_s','height_time_constant_s'):
                 if any(n <= 0 for n in numbers):
                     raise ValueError(f'{section}.{key}: positive values required')
             if key in ('samples','image_size') and any(type(n) is not int for n in numbers):
@@ -153,16 +150,17 @@ def generate_model(config, output):
     leaf(optical,'pose',[0,0,0,-math.pi/2,0,-math.pi/2],
          'ROS REP103 optical axes x-right y-down z-forward relative to native camera x-forward y-left z-up; https://www.ros.org/reps/rep-0103.html',relative_to='d435i_frame')
     link=ET.SubElement(model,'link',name='base_link')
+    # The follower sets every pose; physics must neither pull it down nor push it out of terrain.
+    leaf(link,'gravity','false')
     inertial=ET.SubElement(link,'inertial')
     mass=p['body']['mass'];length,width,height=p['body']['size']
     leaf(inertial,'mass',mass,source('body','mass'))
     inertia=ET.SubElement(inertial,'inertia')
     for tag,value in [('ixx',mass*(width**2+height**2)/12),('iyy',mass*(length**2+height**2)/12),('izz',mass*(length**2+width**2)/12),('ixy',0),('ixz',0),('iyz',0)]:
         leaf(inertia,tag,value,'Analytic uniform box inertia m/12 times sum of squared perpendicular dimensions; '+source('body','size')+'; '+source('body','mass'))
-    for tag in ('collision','visual'):
-        node=ET.SubElement(link,tag,name='standing_envelope_'+tag)
-        box=ET.SubElement(ET.SubElement(node,'geometry'),'box')
-        leaf(box,'size',p['body']['size'],source('body','size')+'; abstraction fills standing envelope, not exact body/legs')
+    node=ET.SubElement(link,'visual',name='standing_envelope_visual')
+    box=ET.SubElement(ET.SubElement(node,'geometry'),'box')
+    leaf(box,'size',p['body']['size'],source('body','size')+'; abstraction fills standing envelope, not exact body/legs; visual only, the kinematic follower owns the pose')
     for section,kind,topic,frame in [('mid360','gpu_lidar','/mid360','mid360_frame'),('d435i','depth_camera','/d435i/depth','d435i_frame'),('gnss','navsat','/gnss/fix','gnss_frame')]:
         node=ET.SubElement(link,'sensor',name=section,type=kind)
         leaf(node,'pose',[0]*6,'Rigid sensor origin coincides with sourced mounting frame',relative_to=frame)
@@ -204,7 +202,8 @@ def generate_model(config, output):
     ET.indent(root,space='  ')
     output=Path(output)
     output.parent.mkdir(parents=True,exist_ok=True)
-    output.write_text('<?xml version="1.0"?>\n'+ET.tostring(root,encoding='unicode')+'\n',encoding='utf-8')
+    output.write_text('<?xml version="1.0"?>\n'+ET.tostring(root,encoding='unicode')+'\n',
+                      encoding='utf-8',newline='\n')
     return output
 
 

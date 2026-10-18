@@ -2,13 +2,14 @@
 <package format="3">
   <name>hill_patrol_sim</name>
   <version>0.1.0</version>
-  <description>Fortress terrain and sensor proxy with ideal kinematic follower.</description>
-  <maintainer email="lee@example.com">Lee</maintainer>
+  <description>Fortress hill world generator, sensor proxy and kinematic follower.</description>
+  <maintainer email="bernardx526@163.com">bernardx526</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
   <depend>ignition-gazebo6</depend>
   <depend>yaml-cpp</depend>
+  <buildtool_depend>python3-yaml</buildtool_depend>
   <exec_depend>python3-yaml</exec_depend>
   <test_depend>ament_index_python</test_depend>
   <test_depend>launch_pytest</test_depend>

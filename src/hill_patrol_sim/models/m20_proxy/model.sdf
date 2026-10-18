@@ -21,6 +21,7 @@
       <pose relative_to="d435i_frame">0 0 0 -1.5707963267948966 0 -1.5707963267948966</pose>
     </frame>
     <link name="base_link">
+      <gravity>false</gravity>
       <inertial>
         <!-- https://www.deeprobotics.cn/en/index/lynx.html Weight Incl Battery 35kg; lumped proxy includes sensors, no duplicated mass -->
         <mass>35.0</mass>
@@ -39,18 +40,10 @@
           <iyz>0</iyz>
         </inertia>
       </inertial>
-      <collision name="standing_envelope_collision">
-        <geometry>
-          <box>
-            <!-- https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; abstraction fills standing envelope, not exact body/legs -->
-            <size>0.82 0.43 0.57</size>
-          </box>
-        </geometry>
-      </collision>
       <visual name="standing_envelope_visual">
         <geometry>
           <box>
-            <!-- https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; abstraction fills standing envelope, not exact body/legs -->
+            <!-- https://www.deeprobotics.cn/en/index/lynx.html Standing Dimensions 820x430x570mm; T14 collision envelope; abstraction fills standing envelope, not exact body/legs; visual only, the kinematic follower owns the pose -->
             <size>0.82 0.43 0.57</size>
           </box>
         </geometry>
@@ -109,23 +102,23 @@
         <ignition_frame_id>d435i_frame</ignition_frame_id>
         <always_on>true</always_on>
         <topic>/d435i/depth</topic>
-        <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported15Hz1280x720; SIMULATION CHOICE -->
+        <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported15Hz848x480; SIMULATION CHOICE -->
         <update_rate>15.0</update_rate>
         <camera>
           <optical_frame_id>d435i_frame</optical_frame_id>
           <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table3-49 HD depth87x58deg; ideal square-pixel projection; degrees times pi/180 -->
           <horizontal_fov>1.5184364492350666</horizontal_fov>
           <image>
-            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported1280x720; SIMULATION CHOICE HD profile -->
-            <width>1280</width>
-            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported1280x720; SIMULATION CHOICE HD profile -->
-            <height>720</height>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported848x480 (Intel recommended depth profile); SIMULATION CHOICE review 2026-10-18: ~6.1MB/frame instead of 22MB for elevation mapping -->
+            <width>848</width>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-2 supported848x480 (Intel recommended depth profile); SIMULATION CHOICE review 2026-10-18: ~6.1MB/frame instead of 22MB for elevation mapping -->
+            <height>480</height>
             <format>R_FLOAT32</format>
           </image>
           <clip>
-            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ280mm at1280x720; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
-            <near>0.28</near>
-            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ280mm at1280x720; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ195mm at848x480; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
+            <near>0.195</near>
+            <!-- https://realsenseai.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf Table4-11 minZ195mm at848x480; https://realsenseai.com/products/depth-camera-d435i/ ideal range0.3..3m; SIMULATION CHOICE farclip3m, not maximum hardware range -->
             <far>3.0</far>
           </clip>
           <noise>
