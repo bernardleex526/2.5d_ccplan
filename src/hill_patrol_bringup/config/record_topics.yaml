@@ -1,0 +1,18 @@
+# T30 data recording topics (plan D19: every bag records RTK position/heading/state).
+# /sim/* topics exist only in simulation; ros2 bag records whatever is available.
+topics:
+  - /points_lio
+  - /imu
+  - /d435i/depth/points
+  - /gnss/fix
+  - /tf
+  - /tf_static
+  - /m20/gait
+  - /m20/fault
+  - /m20/link_ok
+  - /gait/state
+  - /localization/ok
+  - /localization/pose
+  - /elevation_mapping_node/elevation_map_raw
+  - /cmd_vel
+  - /sim/ground_truth/pose
