@@ -212,7 +212,6 @@ def test_installed_follower(follower_launch):
         ns = [m.header.stamp.sec*1000000000+m.header.stamp.nanosec for m in imus[-100:]]
         configured = round(1e9/imu_hz)
         assert all((b-a) % configured == 0 and b > a for a, b in zip(ns, ns[1:]))
-        thresholds.report('elev_err_m', support_error)
         diagnostics = {'scenario': scenario, 'support_error_m': support_error,
                        'imu_peak_specific_force_m_s2': peak, 'imu_bound_m_s2': bound,
                        'imu_peak_gyro_rad_s': gyro, 'imu_rate_hz': rate,

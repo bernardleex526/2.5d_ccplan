@@ -17,6 +17,8 @@ import uuid
 
 import pytest
 
+from hill_patrol_testing import thresholds
+
 MAPS = Path(os.environ.get('HILL_PATROL_MAPS', Path.home() / 'hill_patrol_ws/maps'))
 MAP_DIR = MAPS / 'data/hill_world_small'
 
@@ -74,4 +76,5 @@ def test_gait_patrol(tmp_path):
     assert [re.match(r'(\d+)->(\d+)', s).groups() for s in switches] == \
         [('1', '14'), ('14', '1'), ('1', '14'), ('14', '1')], switches
     lap = json.loads(results[-1])
+    thresholds.report('patrol_success_P', lap['success_rate'])
     assert lap['success'], lap

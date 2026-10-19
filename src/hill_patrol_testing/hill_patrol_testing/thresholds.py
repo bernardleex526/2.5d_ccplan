@@ -32,6 +32,16 @@ def parameter(name):
     return value
 
 
+def report_worst(metric, value):
+    """Report the worse of value and the previously recorded value (per direction)."""
+    entry = _load()[metric]
+    if METRICS_PATH.is_file():
+        previous = json.loads(METRICS_PATH.read_text(encoding='utf-8')).get(metric)
+        if isinstance(previous, (int, float)) and isinstance(entry, dict):
+            value = max(value, previous) if entry.get('direction') == 'max' else min(value, previous)
+    report(metric, value)
+
+
 def report(metric, value):
     """Record a metric, then judge it against its non-null threshold.
 

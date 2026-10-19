@@ -79,6 +79,5 @@ def test_mapping_loop_closure(tmp_path):
     assert any(k < n for k, n in outliers), 'every loop edge was rejected as an outlier'
 
     result = eval_traj.evaluate(load_csv(tmp_path / 'est.csv'), load_csv(tmp_path / 'truth.csv'))
-    thresholds.report('loc_pos_err_m', result['ate_rmse_m'])
-    thresholds.report('loc_yaw_err_deg', result['yaw_rmse_deg'])
+    thresholds.report('mapping_ate_m', result['ate_rmse_m'])
     print('MAPPING_RESULT', result, 'loops', max(loops))

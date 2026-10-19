@@ -104,6 +104,6 @@ def test_relocalization(start, tmp_path):
     truth = np.array(load_csv(tmp_path / 'truth.csv'))
     est[:, 1:4] += origin  # map -> world (map axes are world axes at the route start)
     result = eval_traj.evaluate(est.tolist(), truth.tolist(), align='none', max_dt=0.05)
-    thresholds.report('loc_pos_err_m', result['ate_rmse_m'])
-    thresholds.report('loc_yaw_err_deg', result['yaw_rmse_deg'])
+    thresholds.report_worst('loc_pos_err_m', result['ate_rmse_m'])
+    thresholds.report_worst('loc_yaw_err_deg', result['yaw_rmse_deg'])
     print('RELOC_RESULT', start, result)

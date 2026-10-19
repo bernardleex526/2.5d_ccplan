@@ -1,8 +1,10 @@
 # 验收指标阈值（第 2 检查点由用户冻结）。null = 只报告、不判定。
 # direction: max = 实测值不得大于阈值；min = 实测值不得小于阈值。
-loc_pos_err_m: {value: null, direction: max}      # 待确认（第 2 检查点冻结）
-loc_yaw_err_deg: {value: null, direction: max}    # 待确认（第 2 检查点冻结）
-elev_err_m: {value: null, direction: max}         # 待确认（第 2 检查点冻结）
+loc_pos_err_m: {value: null, direction: max}      # 重定位位置误差 RMSE（各起点最大值）；待确认（第 2 检查点冻结）
+loc_yaw_err_deg: {value: null, direction: max}    # 重定位航向误差 RMSE（各起点最大值）；待确认（第 2 检查点冻结）
+elev_err_m: {value: null, direction: max}         # 全局高程图步道区 RMSE（T22）；待确认（第 2 检查点冻结）
+elev_coverage: {value: null, direction: min}      # 全局高程图步道区覆盖率（T22）；待确认（第 2 检查点冻结）
+mapping_ate_m: {value: null, direction: max}      # 建图轨迹 ATE RMSE（SE3 对齐，T20）；待确认（第 2 检查点冻结）
 patrol_success_P: {value: null, direction: min}   # 待确认（第 2 检查点冻结）
 # 巡逻圈数 N 是运行参数而非判定指标，由 patrol_manager 读取。
 patrol_laps_N: null                               # 待确认（第 2 检查点冻结）

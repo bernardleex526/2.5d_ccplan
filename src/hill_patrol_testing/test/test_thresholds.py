@@ -31,8 +31,10 @@ def test_committed_thresholds_are_unfrozen_and_report_only(metrics_path):
     assert thresholds.THRESHOLDS_PATH == workspace / 'src/hill_patrol_bringup/config/thresholds.yaml'
     configured = yaml.safe_load(thresholds.THRESHOLDS_PATH.read_text(encoding='utf-8'))
     judged = {k for k, v in configured.items() if isinstance(v, dict)}
-    assert judged == {'loc_pos_err_m', 'loc_yaw_err_deg', 'elev_err_m', 'patrol_success_P'}
+    assert judged == {'loc_pos_err_m', 'loc_yaw_err_deg', 'elev_err_m', 'elev_coverage',
+                      'mapping_ate_m', 'patrol_success_P'}
     assert configured['patrol_success_P']['direction'] == 'min'
+    assert configured['elev_coverage']['direction'] == 'min'
     assert all(configured[k]['value'] is None for k in judged)
     assert thresholds.parameter('patrol_laps_N') is None
     for metric in judged:
@@ -77,3 +79,14 @@ def test_baseline_report_lists_measured_values_without_suggestions():
     assert '| loc_pos_err_m | 0.5400 | not frozen | max |' in text
     assert '| patrol_success_P | 1.0000 | 0.9 | min |' in text
     assert 'Not yet measured: elev_err_m' in text and '## diag' in text
+
+
+def test_report_worst_keeps_the_worse_value(metrics_path, config):
+    config('loc_pos_err_m: {value: null, direction: max}\n'
+           'patrol_success_P: {value: null, direction: min}\n')
+    for value in (0.1, 0.3, 0.2):
+        thresholds.report_worst('loc_pos_err_m', value)
+    for value in (1.0, 0.5, 0.8):
+        thresholds.report_worst('patrol_success_P', value)
+    recorded = json.loads(metrics_path.read_text(encoding='utf-8'))
+    assert recorded == {'loc_pos_err_m': 0.3, 'patrol_success_P': 0.5}
