@@ -147,6 +147,14 @@ class Zones:
             return 'exit'
         return None
 
+    def leaving_soon(self, xy, velocity, lookahead_s, max_m):
+        """True if inside a zone now but the position lookahead_s ahead (capped at max_m) is not."""
+        if self.zone_at(*_point(xy)) is None:
+            return False
+        dx, dy = velocity[0] * lookahead_s, velocity[1] * lookahead_s
+        scale = min(1.0, max_m / max(1e-9, math.hypot(dx, dy)))
+        return self.zone_at(xy[0] + dx * scale, xy[1] + dy * scale) is None
+
     def distance(self, x, y):
         """Distance from (x, y) to the nearest zone (0 inside or on a boundary)."""
         point = _point((x, y))

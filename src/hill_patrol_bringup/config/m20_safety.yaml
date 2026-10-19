@@ -6,3 +6,5 @@ loc_lost_timeout_s: 1.0     # /localization/ok 持续 false 超过该时间 → 
 link_timeout_s: 1.0         # 超过该时间无 M20 状态回报 → 锁死故障
 gait_switch_timeout_s: 5.0  # 步态切换请求后超过该时间未确认 → 锁死故障
 stopped_settle_s: 0.3       # 连续输出零速度达到该时间才发布 /m20/stopped=true
+exit_lookahead_s: 0.6        # 离开台阶区时提前该时间（按当前速度外推）开始停车切换，保证中心越界前已停稳
+exit_lookahead_max_m: 0.5    # 外推距离上限；必须小于台阶区在踏面两侧的外扩宽度（仿真 1.0 m），防止台阶上横移被误判为离开

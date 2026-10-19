@@ -1,7 +1,10 @@
 """ROS gait manager for map-frame stair zones; review before hardware use.
 
 Parameters: zones_file, safety_path (m20_safety.yaml: gait_switch_timeout_s and
-stopped_settle_s). Hold stays asserted until TF and real gait feedback exist and
+stopped_settle_s, exit_lookahead_s). The switch back to Basic starts when the
+position predicted exit_lookahead_s ahead (from the TF velocity) leaves the zone,
+so the robot is stopped before its centre crosses the boundary (plan D8: stop,
+switch, then walk on). Entry is not anticipated: zones begin on flat platform. Hold stays asserted until TF and real gait feedback exist and
 the bridge is subscribed. Stopped evidence is the bridge's /m20/stopped.
 While /gait/state is STOPPING or SWITCHING the robot is held; the patrol manager
 should pause its Nav2 goal so progress checking cannot abort it. FAULT keeps hold
@@ -35,6 +38,10 @@ class GaitNode(Node):
             safety = yaml.safe_load(stream)
         self.machine = GaitStateMachine(safety['gait_switch_timeout_s'],
                                         safety['stopped_settle_s'])
+        self.lookahead = float(safety['exit_lookahead_s'])
+        # Cap on the predicted displacement: must stay below the zones' lateral margin
+        # beyond the treads, or sideways motion on the stairs could look like an exit.
+        self.lookahead_max = float(safety['exit_lookahead_max_m'])
         self._buffer = Buffer()
         self._listener = TransformListener(self._buffer, self)
         self._hold_pub = self.create_publisher(Bool, '/m20/hold', 10)
@@ -46,6 +53,8 @@ class GaitNode(Node):
                                  lambda m: self.machine.observe_gait(m.data), 10)
         self.create_service(Trigger, '/gait/reset_fault', self._on_reset)
         self._previous = None
+        self._previous_stamp = None
+        self._velocity = (0.0, 0.0)
         self._initialized = False
         self._timer = self.create_timer(.05, self._step,
                                        clock=Clock(clock_type=ClockType.STEADY_TIME))
@@ -70,6 +79,10 @@ class GaitNode(Node):
             self._publish(True, sm.state, sm.request)
             return
         xy = (transform.transform.translation.x, transform.transform.translation.y)
+        stamp = rclpy.time.Time.from_msg(transform.header.stamp).nanoseconds * 1e-9
+        if self._previous is not None and self._previous_stamp is not None and stamp > self._previous_stamp:
+            dt = stamp - self._previous_stamp
+            self._velocity = ((xy[0] - self._previous[0]) / dt, (xy[1] - self._previous[1]) / dt)
         if not self._initialized:
             if (sm.feedback not in (1, 14) or self._hold_pub.get_subscription_count() == 0
                     or self._request_pub.get_subscription_count() == 0):
@@ -78,8 +91,13 @@ class GaitNode(Node):
             sm.initialize(sm.feedback, self.zones.zone_at(*xy) is not None)
             self._initialized = True
         else:
-            sm.event(self.zones.transition(self._previous, xy))
+            event = self.zones.transition(self._previous, xy)
+            if event is None and self.zones.leaving_soon(xy, self._velocity, self.lookahead,
+                                                          self.lookahead_max):
+                event = 'exit'
+            sm.event(event)
         self._previous = xy
+        self._previous_stamp = stamp
         sm.tick()
         self._publish(sm.hold, sm.state, sm.request)
 

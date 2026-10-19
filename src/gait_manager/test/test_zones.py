@@ -126,3 +126,26 @@ def test_edge_distance_inside_and_outside():
     assert zone.edge_distance((2.0, 1.0)) == pytest.approx(1.0)
     assert zone.edge_distance((0.5, 1.0)) == pytest.approx(0.5)
     assert zone.edge_distance((5.0, 1.0)) == pytest.approx(1.0)
+
+
+@pytest.fixture
+def stair_zone():
+    # Treads x 1..5, |y| <= 0.75; zone adds 1 m of flat platform on every side.
+    return Zones({'zones': [{'id': 's', 'gait': 14,
+                             'polygon': [[0, -1.75], [6, -1.75], [6, 1.75], [0, 1.75], [0, -1.75]]}]})
+
+
+def test_leaving_soon_triggers_before_the_exit_boundary(stair_zone):
+    assert not stair_zone.leaving_soon((5.0, 0), (0.5, 0), 0.6, 0.5)   # 0.3 m ahead still inside
+    assert stair_zone.leaving_soon((5.8, 0), (0.5, 0), 0.6, 0.5)       # 0.3 m ahead is outside
+    assert not stair_zone.leaving_soon((6.5, 0), (0.5, 0), 0.6, 0.5)   # already outside: plain exit
+
+
+def test_leaving_soon_cap_prevents_sideways_false_exit_on_treads(stair_zone):
+    # Fast sideways motion on the treads: uncapped prediction would leave the zone.
+    assert not stair_zone.leaving_soon((3.0, 0.75), (0, 2.0), 0.6, 0.5)
+    assert stair_zone.leaving_soon((3.0, 0.75), (0, 2.0), 0.6, 1.2)
+
+
+def test_leaving_soon_ignores_standing_robot(stair_zone):
+    assert not stair_zone.leaving_soon((5.99, 0), (0.0, 0.0), 0.6, 0.5)
