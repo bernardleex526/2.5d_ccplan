@@ -14,22 +14,31 @@ jobs:
       image: ros:humble-ros-base-jammy
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Install pytest
+      - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3-pytest
+          apt-get install -y --no-install-recommends python3-pytest python3-numpy python3-pil \
+            python3-yaml ros-humble-launch-pytest ros-humble-tf2-ros-py ros-humble-std-srvs \
+            ros-humble-nav2-msgs ros-humble-grid-map-msgs
           # Jammy's python3-pytest installs pytest-3, not the pytest command.
           ln -s /usr/bin/pytest-3 /usr/local/bin/pytest
-          pytest --version
+      - name: Build pure-Python packages
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          # Gazebo plugin, Lightning-LM and elevation_mapping_cupy need Fortress/GPU: not in CI.
+          colcon build --base-paths src --packages-skip hill_patrol_sim hill_patrol_bringup \
+            --packages-ignore-regex '^(lightning|livox|elevation|semantic|nav2_gridmap|convex|cgal|grid_map_filters).*'
       - name: Run CPU tests
         shell: bash
         run: |
           source scripts/env.sh
-          status=0
-          pytest --ignore=src/third_party -m "not gpu and not sim" || status=$?
-          case "$status" in
-            0|5) exit 0 ;;
-            *) exit "$status" ;;
-          esac
+          # hill_patrol_sim is not built here (Gazebo plugin); its pure modules import from source.
+          export PYTHONPATH=$PWD/src/hill_patrol_sim:$PYTHONPATH
+          pytest -m "not gpu and not sim" \
+            src/m20_bridge/test src/gait_manager/test/test_zones.py \
+            src/gait_manager/test/test_state_machine.py src/hill_patrol_testing/test \
+            src/geo_alignment/test src/patrol_manager/test src/traversability_maps/test \
+            src/hill_patrol_sim/test/test_world_params.py src/hill_patrol_sim/test/test_generate_world.py \
+            src/hill_patrol_sim/test/test_generate_model.py src/hill_patrol_sim/test/test_cloud_adapter.py \
+            src/hill_patrol_bringup/test/test_record.py
