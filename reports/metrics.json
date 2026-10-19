@@ -1,0 +1,8 @@
+{
+  "mapping_ate_m": 0.13162181725960617,
+  "elev_err_m": 0.061871860962608674,
+  "elev_coverage": 0.8137870855148343,
+  "loc_pos_err_m": 0.18985273245166967,
+  "loc_yaw_err_deg": 0.5377500572215231,
+  "patrol_success_P": 1.0
+}
