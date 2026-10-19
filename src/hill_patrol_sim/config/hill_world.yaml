@@ -147,3 +147,7 @@ summit_roughness_wavelength:
 stair_zone_margin:
   value: 1.0
   source: "实验设计值：台阶区向外扩展距离 ≥ M20 半机身长 0.41 m + 制动余量"
+
+ground_tree_density:
+  value: 3.0
+  source: "实验设计值：山脚平地（回程道两侧及连接段）散布树木密度（棵/100 m²），为激光提供非周期特征，缓解计划风险 K2"

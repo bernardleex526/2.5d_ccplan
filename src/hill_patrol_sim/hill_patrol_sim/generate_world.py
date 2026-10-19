@@ -37,6 +37,7 @@ import yaml
 
 
 FOUNDATION = 0.2  # Boxes and wedges extend below ground so no gaps appear at z=0.
+GROUND_MARGIN = 10.0  # Support grid extends this far past the hill and loop (sampling choice).
 FINE, COARSE, SUMMIT_SAMPLE, MESH_X, MESH_Y = 0.25, 1.0, 0.1, 1.0, 2.0
 
 SCALARS = ('step_height tread_depth intermediate_landing_depth step_width ramp_length '
@@ -48,7 +49,7 @@ REQUIRED = SCALARS + ('world_name step_count_up step_count_down flight_max_steps
                       'flight_steps_down ramp_slope_deg summit_roughness_max summit_seed '
                       'trees_seed stair_zones_count origin_latitude origin_longitude '
                       'origin_altitude hillside_slope_deg hillside_undulation_wavelength '
-                      'hillside_tree_density').split()
+                      'hillside_tree_density ground_tree_density').split()
 
 
 def load_params(path):
@@ -89,8 +90,9 @@ def load_params(path):
     if (not isinstance(wavelengths, list) or len(wavelengths) != 2
             or not 0 < wavelengths[0] <= wavelengths[1]):
         raise ValueError('hillside_undulation_wavelength must be an ordered positive pair')
-    if not isinstance(p['hillside_tree_density'], (int, float)) or p['hillside_tree_density'] < 0:
-        raise ValueError('hillside_tree_density must be nonnegative')
+    for key in ('hillside_tree_density', 'ground_tree_density'):
+        if not isinstance(p[key], (int, float)) or p[key] < 0:
+            raise ValueError(f'{key} must be nonnegative')
     if p['stair_zone_margin'] >= p['intermediate_landing_depth']:
         raise ValueError('stair_zone_margin must stay on the transition platforms')
     for direction in ('up', 'down'):
@@ -319,6 +321,13 @@ def hillside(hill, side, xs):
     return [vertices[k] for k in used], [tuple(index[k] for k in face) for face in faces]
 
 
+def _segment_distance(px, py, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = dx * dx + dy * dy
+    t = 0. if length == 0 else max(0., min(1., ((px - a[0]) * dx + (py - a[1]) * dy) / length))
+    return math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
+
+
 def trees(hill):
     p = hill.p
     rng = random.Random(p['trees_seed'])
@@ -343,6 +352,19 @@ def trees(hill):
         y = rng.choice((-1, 1)) * rng.uniform(hill.corridor + p['trees_radius'], hill.corridor + reach)
         if (hill.terrain(x, y) > 0 and abs(y - hill.return_y) > clearance):
             placed.append((x, y))
+    # Scattered trees on the flat ground around the loop: irregular landmarks for the
+    # lidar on the return lane and connecting legs, kept clear of every route leg.
+    turn = p['turn_offset']
+    route = [(-turn, 0.), (hill.end + turn, 0.), (hill.end + turn, hill.return_y),
+             (-turn, hill.return_y), (-turn, 0.)]
+    keep_out = p['trees_offset_y']
+    x_lo, x_hi = -turn - 8., hill.end + turn + 8.
+    y_lo, y_hi = hill.return_y - 8., -hill.corridor
+    for _ in range(round(p['ground_tree_density'] * (x_hi - x_lo) * (y_hi - y_lo) / 100)):
+        x, y = rng.uniform(x_lo, x_hi), rng.uniform(y_lo, y_hi)
+        if hill.terrain(x, y) == 0 and all(_segment_distance(x, y, a, b) > keep_out
+                                           for a, b in zip(route, route[1:])):
+            placed.append((x, y))
     r = p['trees_radius']
     result = []
     for x, y in placed:
@@ -353,18 +375,24 @@ def trees(hill):
 
 
 def support_grid(hill):
+    """Support grid over the whole hill footprint, the loop and GROUND_MARGIN beyond.
+
+    Fine spacing along the walking lanes, coarse elsewhere. The follower refuses to
+    leave this grid, so it must not end near anywhere a (mis-localised) robot can go.
+    """
     p = hill.p
     turn = p['turn_offset']
-    x_lo, x_hi = -turn - 1, hill.end + turn + 1
+    reach = hill.corridor + hill.peak / hill.flank + p['hillside_undulation_amplitude'] / hill.flank
+    x_lo, x_hi = -turn - GROUND_MARGIN, hill.end + turn + GROUND_MARGIN
+    y_lo, y_hi = min(hill.return_y, -reach) - GROUND_MARGIN, reach + GROUND_MARGIN
     xs = {round(x_lo + i * FINE, 9) for i in range(math.ceil((x_hi - x_lo) / FINE) + 1)}
-    xs |= {round(v, 9) for v in hill.x_breaks()}
-    y_lo, y_hi = hill.return_y - 1.5, hill.corridor + 1
+    xs |= {round(v, 9) for v in hill.x_breaks()} | {round(x_hi, 9)}
     ys = {round(v, 9) for v in (p['step_width'] / 2, -p['step_width'] / 2, hill.corridor,
-                                -hill.corridor, hill.return_y)}
+                                -hill.corridor, hill.return_y, y_lo, y_hi)}
     ys |= {round(-hill.corridor - 1 + i * FINE, 9) for i in range(math.ceil((2 * hill.corridor + 2) / FINE) + 1)}
-    ys |= {round(hill.return_y - 1.5 + i * FINE, 9) for i in range(13)}
-    ys |= {round(-hill.corridor - 1 - k * COARSE, 9)
-           for k in range(1, math.ceil((-hill.corridor - 1 - y_lo) / COARSE))}
+    ys |= {round(hill.return_y - 2 + i * FINE, 9) for i in range(17)}
+    ys |= {round(y_lo + k * COARSE, 9) for k in range(math.ceil((y_hi - y_lo) / COARSE) + 1)}
+    x_hi, y_lo, y_hi = round(x_hi, 9), round(y_lo, 9), round(y_hi, 9)
     xs, ys = sorted(x for x in xs if x_lo <= x <= x_hi), sorted(y for y in ys if y_lo <= y <= y_hi)
     crest = {x: hill.support(x) for x in xs}
     return xs, ys, [[hill.terrain(x, y, crest[x]) for x in xs] for y in ys]

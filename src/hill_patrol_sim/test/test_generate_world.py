@@ -154,8 +154,10 @@ def test_trees_clear_walking_lanes_and_stand_on_terrain(world):
         x, y, z = vector(tree, 'pose')[:3]
         r = float(tree.findtext('collision/geometry/cylinder/radius'))
         length = float(tree.findtext('collision/geometry/cylinder/length'))
-        assert abs(y)-r > p['step_width']/2
-        assert abs(y-hill.return_y)-r > p['step_width']/2
+        turn = p['turn_offset']
+        if -turn <= x <= hill.end + turn:  # lanes span the loop; beyond it is open ground
+            assert abs(y)-r > p['step_width']/2
+            assert abs(y-hill.return_y)-r > p['step_width']/2
         assert z-length/2 <= hill.terrain(x, y)+1e-9
         assert z+length/2 == pytest.approx(hill.terrain(x, y)+p['trees_height'])
 
@@ -176,6 +178,16 @@ def test_trees_keep_clear_of_the_whole_patrol_route(world):
         x, y = vector(tree, 'pose')[:2]
         nearest = min(distance(x, y, a, b) for a, b in zip(points, points[1:]))
         assert nearest > clearance, f'tree at ({x:.2f}, {y:.2f}) blocks the route ({nearest:.2f} m)'
+
+
+def test_support_grid_covers_hill_and_loop_with_margin(world):
+    xs, ys, hill = world['xs'], world['ys'], world['hill']
+    margin = generator.GROUND_MARGIN
+    turn = world['p']['turn_offset']
+    assert xs[0] <= -turn - margin + 1e-9 and xs[-1] >= hill.end + turn + margin - 1e-9
+    assert ys[0] <= hill.return_y - margin + 1e-9
+    # The hill's left flank reaches ground before the grid edge on +y too.
+    assert world['grid'][(xs[len(xs) // 2], ys[-1])] == 0
 
 
 def test_world_declares_sensor_systems(world):
