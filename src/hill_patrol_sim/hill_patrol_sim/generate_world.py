@@ -12,6 +12,7 @@ Products written to the output directory:
   <name>_body_height.csv   follower support: x,y,z Cartesian grid, rows y-major,
                            ascending nonuniform axes
   <name>_truth_zones.yaml  stair zones (stair_zones.yaml schema) incl. stair_zone_margin
+  <name>_truth_treads.yaml x extent and half width of each stair run (gait checking)
   <name>_route.yaml        loop waypoints (waypoints.yaml schema)
 
 Support within the stair corridor is the line through the tread edges of each
@@ -487,6 +488,14 @@ def generate_world(config, output_dir):
     zone_path = out / f'{name}_truth_zones.yaml'
     zone_path.write_text(yaml.safe_dump({'zones': hill.zones}, sort_keys=False),
                          encoding='utf-8', newline='\n')
+    # Ground truth for gait checking: x extent (first tread start, last tread end) and
+    # half width of each stair run, flights and their intermediate landings included.
+    treads_path = out / f'{name}_truth_treads.yaml'
+    runs = [{'id': 'stair_' + d, 'x0': hill.steps[d][0][0],
+             'x1': hill.steps[d][-1][0] + p['tread_depth'], 'half_width': width / 2}
+            for d in ('up', 'down')]
+    treads_path.write_text(yaml.safe_dump({'stair_runs': runs}, sort_keys=False),
+                           encoding='utf-8', newline='\n')
     turn = p['turn_offset']
     points = [(0., 0.)] + [(s[1], 0.) for s in hill.segments]
     points += [(hill.end + turn, 0.), (hill.end + turn, hill.return_y),
@@ -501,7 +510,8 @@ def generate_world(config, output_dir):
     ET.indent(root)
     sdf_path = out / f'{name}.sdf'
     ET.ElementTree(root).write(sdf_path, encoding='utf-8', xml_declaration=True)
-    return {'sdf': sdf_path, 'body_height': csv_path, 'truth_zones': zone_path, 'route': route_path}
+    return {'sdf': sdf_path, 'body_height': csv_path, 'truth_zones': zone_path,
+            'truth_treads': treads_path, 'route': route_path}
 
 
 def main():

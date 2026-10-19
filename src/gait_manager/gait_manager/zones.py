@@ -138,37 +138,25 @@ class Zones:
         point = _point((x, y))
         return next((zone for zone in self.zones if zone.contains(point)), None)
 
-    def transition(self, prev_xy, cur_xy, exit_margin=0.0):
-        """'enter' on crossing into a zone; 'exit' on leaving its tread core.
-
-        exit_margin > 0: the zone's outer band of that width is flat platform
-        (generator stair_zone_margin), so the handshake back to Basic starts when
-        the robot leaves the core (zone shrunk by exit_margin) heading out, and the
-        robot is already stopped and switched before it crosses the outer boundary.
-        """
-        prev_xy, cur_xy = _point(prev_xy), _point(cur_xy)
-        if exit_margin <= 0:
-            previous = self.zone_at(*prev_xy) is not None
-            current = self.zone_at(*cur_xy) is not None
-            if current and not previous:
-                return 'enter'
-            if previous and not current:
-                return 'exit'
-            return None
-        was_inside, is_inside = self.zone_at(*prev_xy) is not None, self.zone_at(*cur_xy) is not None
-        if is_inside and not was_inside:
+    def transition(self, prev_xy, cur_xy):
+        previous = self.zone_at(*_point(prev_xy)) is not None
+        current = self.zone_at(*_point(cur_xy)) is not None
+        if current and not previous:
             return 'enter'
-        if was_inside and not is_inside:
-            return 'exit'  # left without reaching the core (e.g. backed out of the band)
-        if self._in_core(prev_xy, exit_margin) and not self._in_core(cur_xy, exit_margin):
+        if previous and not current:
             return 'exit'
         return None
-
-    def _in_core(self, point, margin):
-        zone = self.zone_at(*point)
-        return zone is not None and zone.edge_distance(point) >= margin
 
     def distance(self, x, y):
         """Distance from (x, y) to the nearest zone (0 inside or on a boundary)."""
         point = _point((x, y))
         return min((zone.distance_to(point) for zone in self.zones), default=math.inf)
+
+
+def footprint_over_run(x, y, yaw, half_length, half_width, run):
+    """True if the rotated body rectangle overlaps the run's rectangle (bounding test)."""
+    c, s = abs(math.cos(yaw)), abs(math.sin(yaw))
+    reach_x = c * half_length + s * half_width
+    reach_y = s * half_length + c * half_width
+    return (x + reach_x >= run['x0'] and x - reach_x <= run['x1']
+            and abs(y) - reach_y <= run['half_width'])

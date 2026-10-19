@@ -31,22 +31,23 @@ def _setup(context):
                         WORLDS[world], str(patrol_dir)], check=True)
     bringup = Path(get_package_share_directory('hill_patrol_bringup'))
     sim_share = Path(get_package_share_directory('hill_patrol_sim'))
-    world_params = yaml.safe_load((sim_share / 'config' / f'{WORLDS[world]}.yaml').read_text(encoding='utf-8'))
-    margin = float(world_params['stair_zone_margin']['value'])
+    sensors = yaml.safe_load((sim_share / 'config/sensors.yaml').read_text(encoding='utf-8'))
+    length, width, _ = sensors['body']['size']['value']
     return [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(bringup / 'launch/navigation.launch.py')),
             launch_arguments={'world': world, 'map_dir': LaunchConfiguration('map_dir').perform(context),
-                              'zones_file': str(patrol_dir / 'stair_zones.yaml'),
-                              'exit_margin': str(margin)}.items()),
+                              'zones_file': str(patrol_dir / 'stair_zones.yaml')}.items()),
         Node(package='patrol_manager', executable='patrol_node', name='patrol_manager',
              parameters=[{'use_sim_time': True, 'waypoints_file': str(patrol_dir / 'waypoints.yaml'),
                           'laps': int(LaunchConfiguration('laps').perform(context)),
                           'max_attempts': 2}],
              output='screen'),
         Node(package='hill_patrol_sim', executable='gait_rule_monitor', name='gait_rule_monitor',
-             parameters=[{'use_sim_time': True, 'margin': margin,
-                          'zones_file': str(sim_share / 'worlds' / f'{WORLDS[world]}_truth_zones.yaml')}],
+             parameters=[{'use_sim_time': True, 'body_half_length': length / 2,
+                          'body_half_width': width / 2,
+                          'zones_file': str(sim_share / 'worlds' / f'{WORLDS[world]}_truth_zones.yaml'),
+                          'treads_file': str(sim_share / 'worlds' / f'{WORLDS[world]}_truth_treads.yaml')}],
              output='screen'),
     ]
 
