@@ -21,16 +21,11 @@ MAPS = Path(os.environ.get('HILL_PATROL_MAPS', Path.home() / 'hill_patrol_ws/map
 MAP_DIR = MAPS / 'data/hill_world_small'
 
 
-def echo_stream(env, topic, sink, stop):
-    process = subprocess.Popen(['ros2', 'topic', 'echo', topic, '--field', 'data'], env=env,
-                               stdout=subprocess.PIPE, text=True, start_new_session=True)
+def echo_stream(process, sink):
     for line in process.stdout:
         line = line.strip()
         if line and line != '---':
             sink.append(line.strip("'"))
-        if stop.is_set():
-            break
-    os.killpg(process.pid, signal.SIGINT)
 
 
 @pytest.mark.sim
@@ -46,14 +41,15 @@ def test_gait_patrol(tmp_path):
                                'laps:=1'], env=env, stdout=log, stderr=subprocess.STDOUT,
                               start_new_session=True)
     states, switches, results, violations = [], [], [], []
-    stop = threading.Event()
-    threads = [threading.Thread(target=echo_stream, args=(env, topic, sink, stop), daemon=True)
-               for topic, sink in (('/gait/state', states), ('/gait_rule/switches', switches),
-                                   ('/patrol/lap_result', results), ('/gait_rule/violations', violations))]
+    echoes = []
     try:
         time.sleep(60)
-        for thread in threads:
-            thread.start()
+        for topic, sink in (('/gait/state', states), ('/gait_rule/switches', switches),
+                            ('/patrol/lap_result', results), ('/gait_rule/violations', violations)):
+            process = subprocess.Popen(['ros2', 'topic', 'echo', topic, '--field', 'data'], env=env,
+                                       stdout=subprocess.PIPE, text=True, start_new_session=True)
+            echoes.append(process)
+            threading.Thread(target=echo_stream, args=(process, sink), daemon=True).start()
         started = subprocess.run(['ros2', 'service', 'call', '/patrol/start', 'std_srvs/srv/Trigger'],
                                  env=env, capture_output=True, text=True, timeout=60)
         assert 'success=True' in started.stdout, started.stdout
@@ -61,7 +57,8 @@ def test_gait_patrol(tmp_path):
         while time.monotonic() < deadline and not results:
             time.sleep(5)
     finally:
-        stop.set()
+        for process in echoes:
+            os.killpg(process.pid, signal.SIGKILL)
         os.killpg(launch.pid, signal.SIGINT)
         try:
             launch.wait(timeout=40)
